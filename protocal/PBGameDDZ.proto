@@ -1,0 +1,269 @@
+package PBGameDDZ;
+
+/* ddz game msgid limits 5000-5100 */
+// req & ack  --------> START
+enum reqMsgID {         
+    MSGID_CALLSCORE_REQ           = 5001; // 叫分
+    MSGID_CALLSCORE_ACK           = 5002; // 叫分
+    MSGID_TAKEOUT_REQ             = 5003; // 出牌
+    MSGID_TAKEOUT_ACK             = 5004; // 出牌
+    MSGID_TRUST_REQ               = 5005; // 进入托管
+    MSGID_TRUST_ACK               = 5006; // 进入托管
+    MSGID_TRUST_CANCEL_REQ        = 5007; // 解除托管
+    MSGID_TRUST_CANCEL_ACK        = 5008; // 解除托管
+    MSGID_KEEP_REQ                = 5009; // 断线续玩
+    MSGID_KEEP_ACK                = 5010;
+    MSGID_READY_REQ               = 5011; // 准备
+    MSGID_READY_ACK               = 5012;
+};
+
+enum notifyMsgID {
+    NOTIFY_STARTGAME    = 5050; 
+    NOTIFY_FORCEQUIT    = 5051; 
+    NOTIFY_TB_STATUS    = 5052; // 桌子当前状态
+    NOTIFY_TRUST        = 5053; // 进入托管
+    NOTIFY_TRUST_CANCEL = 5054; // 解除托管
+    NOTIFY_DEALCARD     = 5055; // 发牌
+    NOTIFY_BASECARD     = 5056; // 发底牌
+    NOTIFY_CALLSCORE    = 5057; // 叫分
+    NOTIFY_SETLORD      = 5058; // 地主确定
+    NOTIFY_TAKEOUT      = 5059; // 出牌
+    NOTIFY_GAMEOVER     = 5060; // 结束游戏
+    NOTIFY_TIMEOUT      = 5061; // 超时间时间
+    NOTIFY_SWITCH_SCENE = 5062; // 进入游戏场景
+};
+
+//! 错误代码
+enum gameErrno {
+    ERR_SUCCESS        = 0;    //成功
+    ERR_UNKNOWN        = -1;   //未知错误
+    ERR_BADPACKET      = -2;   //数据包解析失败
+    ERR_NULLUSERNAME   = -3;   //用户名为空
+    ERR_NOTEXISTGUID   = -4;   //不存在的桌子GUID
+    ERR_NOTEXISTPLAYER = -5;   //不存在的玩家
+    ERR_NOTENTERGAME   = -6;   //未进入游戏
+    ERR_SESSION        = -7;   //错误的回话ID
+    ERR_BADCALLSCORE   = -8;   //错误的叫分数值
+    ERR_BADTAKEOUTNUM  = -9;   //错误的出牌数量
+    ERR_NOTTAKEOUT     = -10;  //当前非出牌状态
+    ERR_NOTCALLSCORE   = -11;  //当前非叫分状态
+    ERR_TAKEOUTORDER   = -12;  //出牌顺序错误
+    ERR_CALLSCOREORDER = -13;  //叫分顺序错误
+    ERR_TRUSTTAKEOUT   = -14;  //托管状态下不允许出牌
+    ERR_TRUSTCALLSCORE = -15;  //托管状态下不允许叫分
+    ERR_LEADEROWNER    = -16;  //领牌状态下必须出牌
+    ERR_TRUSTCOUNT     = -17;  //托管次数超过最大允许值,禁止解除托管
+    ERR_ALREADYTRUST   = -18;  //已经是托管状态,不能重入
+    ERR_NOTTRUST       = -19;  //已经是非托管状态,不能重入
+    ERR_NONWAITSTATUS  = -20;  //非等待状态,不允许准备
+    ERR_TAKEOUTFAILED  = -21;  //出牌失败
+};
+
+ enum gameStatus {
+    TB_IDLE         = 0;   // 空闲：人未坐满
+    TB_READY        = 1;   // 等待：人坐满, 该状态只接受“准备/站起”消息，都准备后进入“发牌”状态，有人站起返回“空闲”状态
+    TB_DEALCARDS    = 2;   // 发牌：通知玩家此状态后，给玩家发牌（服务器延时等待3秒），进入“叫分”状态
+    TB_CALLSCORE    = 3;   // 叫分：此时接收客户端“叫分”消息，叫分结束后2-3秒，进入“踢/反踢”状态
+    TB_TAKEOUT      = 4;   // 出牌：最后一手牌结束后3-4秒，进入结算状态
+    TB_INVALID      = 5;   // 流局
+    TB_SETTLE       = 6;   // 结算
+};
+
+// ACK返回值result：0-成功，非0-错误号
+
+// >>> 通用结构
+
+// 玩家基本信息
+message UserInfo {
+    required string username = 1;   // 用户名
+    required string nickname = 2;   // 昵称
+    required int32 avataType = 3;   // 1-系统头像, 2-自定义头像
+    required string avataId = 4;    // 头像ID
+    required int32 sex = 5;         // 0-female 1-male
+    required int64 coins = 6;       // 游戏币
+    required int64 vipPoints = 7;   // 竞技点
+    optional int64 exp = 8;         // 经验值
+    optional int32 innings = 9;     // 游戏局数
+    optional int32 winInnings = 10; // 赢的局数
+    optional int32 place = 11;      // 比赛中的名次
+}
+message MatchInfo {
+    required int32 stageNum = 1;    // 第几轮
+    required int32 inningNum= 2;    // 第几局
+    required int32 userCount = 3;   // 总人数
+}
+// <<<
+
+// >>> 消息协议
+
+// 手牌容器
+message HandCardList {
+    repeated int32 cards = 1;       // 牌数据
+}
+
+// 桌牌容器
+message TableCardList {
+    repeated int32 cards = 1;       // 牌数据
+    required int32 type = 2;        // 动作类型: 0-不出 1-没出过
+}
+
+// ------------------- 坐下后的消息 ------------------- START
+//准备
+message ReadyReq {
+    required int32 rev = 1;
+}
+message ReadyAck {
+    required int32 result = 1;
+}
+
+// 叫分
+message CallScoreReq {
+    required int32 score = 1;       // 0-不叫 1,2,3=分数
+}
+
+message CallScoreAck {
+    required int32 result = 1;
+}
+
+// 出牌
+message TakeoutCardReq {
+  repeated int32 cards = 1;         // 出牌数据
+}
+
+message TakeoutCardAck {
+    required int32 result = 1;
+}
+
+// 托管
+message TrustReq {
+    required int32 rev = 1;         // reserved
+}
+
+message TrustAck {
+    required int32 result = 1;
+    optional int32 surplus = 2;     // 剩余托管次数，暂时不用
+}
+
+// 托管解除
+message TrustLiftReq {
+    required int32 rev = 1;         // reserved
+}
+
+message TrustLiftAck {
+    required int32 result = 1;
+}
+
+message KeepPlayingReq {
+    required int32 rev = 1;         // reserved
+}
+// 断线续玩
+message KeepPlayingAck {
+    required int32 result = 1;
+    // 游戏实时信息
+    message GameInfo {
+        required int32 status = 1;      // 游戏当前状态
+        required int32 seatlord = 2;    // 地主的座位号
+        required int32 seatactive = 3;  // 当前活动玩家座位号
+        required int32 multiple = 4;    // 当前倍数, 基本倍数, 如果有踢的需要各自累加倍数
+        required int32 maxcallscore = 5;// 当前最大叫分
+        repeated int32 basecards = 6;   // 底牌数据
+    }
+    
+    // 玩家动态信息
+    message PlayerInfo {
+        required bool trust = 1;          // 托管状态
+        required int32 trustsurplus = 2;  // 解除托管剩余次数
+        required int32 callscore = 3;     // 叫分值
+        repeated int32 cards = 4;         // 手牌内容
+        repeated int32 lastcards = 5;     // 最后一手牌
+        required UserInfo detailinfo = 6; // 用户详细信息 
+    }
+    
+    required GameInfo gameinfo = 2;     // 游戏信息
+    repeated PlayerInfo playerinfo = 3; // 玩家信息
+    required int32 ready = 4;           // 准备超时时间
+    required int32 callscore = 5;       // 叫分超时时间
+    required int32 takeout = 6;         // 出牌超时时间
+    required int32 settle = 7;          // 结算框显示时间（超时后自动准备）
+    required string gameChannel = 8;    // 游戏服务通道号
+    required int32 basicScore   = 9;    // 底分
+    optional MatchInfo matchInfo = 10;  // 如果是游戏场，该字段不用
+}
+// ------------------- 坐下后的消息 ------------------- END
+
+// ------------------- 广播通知消息 ------------------- START
+// 游戏状态变化：1-等待, 2-发牌, 3-叫分, 4-出牌, 5-流局, 6-结算
+message GameStatusNtf {
+    required int32 status = 1;              // 游戏状态
+}
+
+// 进入游戏场景通知
+message GameSwitchSceneNtf {
+    required string gameName = 1;
+    required bool isMatch    = 2;     // 是否为游戏场，true为是
+}
+
+// 游戏开始
+message GameStartNtf {
+    required string gameName = 1;       // 游戏服务通道号
+    required int32 basicScore   = 2;    // 底分
+    repeated UserInfo userinfo  = 3;
+    optional MatchInfo matchInfo = 4;   // 如果是游戏场，该字段不用
+}
+
+// 发牌
+message DealCardNtf {
+    required int32 headerseat = 1;          // 第一个叫分座位号
+    repeated HandCardList cards = 2;        // 玩家手牌
+}
+
+// 叫分
+message UserCallScoreNtf {
+    required int32 seatno = 1;                  // 座位号
+    required int32 seatnext = 2[default=-1];    // 下一个叫分座位，-1叫分结束
+    required int32 score = 3;                   // 叫分值(1/2/3), 0-不叫
+}
+
+// 地主确定
+message LordSetNtf {
+    required int32 seatlord = 1;    // 地主座位号
+    required int32 callscore = 2;   // 地主叫分
+}
+
+// 发底牌
+message SendBaseCardNtf {
+    repeated int32 basecards = 1;   // 底牌数据
+}
+
+// 出牌
+message TakeoutCardNtf {
+    required int32 seatno = 1;      // 出牌座位号
+    required int32 seatnext = 2;    // 下一个出牌座位
+    repeated int32 cards = 3;       // 出牌数据
+    required int32 cardtype = 4;    // 类型
+    required int32 multiple = 5;    // 当前倍数(炸弹产生的倍数)
+}
+
+// 托管
+message TrustNtf {
+    required int32 seatno = 1;
+}
+// 解除托管
+message TrustLiftNtf {
+    required int32 seatno = 1;
+}
+
+// 游戏结束通知
+message GameOverNtf {
+    required int32 reason = 1[default=2];   // 结束原因：1-强制结束，2-达到最大游戏盘数
+}
+
+
+// 操作超时时间请求
+message ActTimeoutNtf {
+    required int32 ready = 1;       // 准备超时时间
+    required int32 callscore = 2;   // 叫分超时时间
+    required int32 takeout = 3;     // 出牌超时时间
+    required int32 settle = 4;      // 结算框显示时间（超时后自动准备）
+}
+// ------------------- 广播通知消息 ------------------- END
