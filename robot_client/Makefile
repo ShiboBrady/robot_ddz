@@ -1,4 +1,4 @@
-TARGET = robot
+TARGET = robot_client
 
 CC = g++
 
