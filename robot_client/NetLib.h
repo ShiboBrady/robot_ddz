@@ -6,12 +6,13 @@
 #include <event2/buffer.h>
 #include <event2/util.h>
 #include <string>
+#include <vector>
 #include "RobotCenter.h"
 
 class NetLib
 {
 public:
-    NetLib(std::string ip, int port);
+    NetLib(std::string ip, int port, int size);
     ~NetLib();
     void connect();
     static void server_msg_cb(struct bufferevent* bev, void* arg);
@@ -22,8 +23,9 @@ public:
 private:
     std::string ip;
     int port;
-    struct event_base *base;
-    struct bufferevent* bev;
+    int size;
+    std::vector<struct event_base *> base;
+    std::vector<struct bufferevent *> bev;
     struct sockaddr_in server_addr;
     static RobotCenter robotCenter;
 };

@@ -12,12 +12,11 @@ using namespace std;
 
 RobotCenter NetLib::robotCenter = RobotCenter();
 
-NetLib::NetLib(string ip, int port)
+NetLib::NetLib(string ip, int port, int size)
     :ip(ip),
-     port(port)
+     port(port),
+     size(size)
 {
-    base = event_base_new();
-    bev = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
     memset(&server_addr, 0, sizeof(server_addr) );
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -31,24 +30,36 @@ NetLib::~NetLib()
 
 void NetLib::connect()
 {
-    bufferevent_socket_connect(bev, (struct sockaddr *)&server_addr, sizeof(server_addr));
-    bufferevent_setcb(bev, server_msg_cb, NULL, event_cb, NULL);
-    bufferevent_enable(bev, EV_READ | EV_PERSIST);
-    struct event* ev_cmd = event_new(base, STDIN_FILENO,
-                                     EV_READ | EV_PERSIST,
-                                     cmd_msg_cb, (void*)bev);
+    for (int index = 0; index != size; ++index)
+    {
+        base.push_back(event_base_new());
+        bev.push_back(bufferevent_socket_new(base[index], -1, BEV_OPT_CLOSE_ON_FREE));
+        bufferevent_socket_connect(bev[index], (struct sockaddr *)&server_addr, sizeof(server_addr));
+        int *a = new int;
+        a = &index;
+        bufferevent_setcb(bev[index], server_msg_cb, NULL, event_cb, static_cast<void*>(a));
+        bufferevent_enable(bev[index], EV_READ | EV_PERSIST);
+        struct event* ev_cmd = event_new(base[index], STDIN_FILENO,
+                                         EV_READ | EV_PERSIST,
+                                         cmd_msg_cb, (void*)(bev[index]));
 
 
-    event_add(ev_cmd, NULL);
+        event_add(ev_cmd, NULL);
+    }
 }
 
 void NetLib::start()
 {
-    event_base_dispatch(base);
+    for (int index = 0; index != size; ++index)
+    {
+        event_base_dispatch(base[index]);
+    }
 }
 
 void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
 {
+    int* index = static_cast<int*>(arg);
+    cout << *index << endl;
     char msgLen[4];
     size_t len = bufferevent_read(bev, msgLen, 4);
     msgLen[len] = '\0';
