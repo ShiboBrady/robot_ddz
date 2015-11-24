@@ -1,10 +1,10 @@
 #include "AbstractProduct.h"
 #include "OGLordRobotAI.h"
 #include "PBGameDDZ.pb.h"
-//#include "GameProtocol.h"
+#include "AIUtils.h"
 
 using namespace PBGameDDZ;
-void printIntVector(vector<int>& vecContent);
+using namespace AIUtils;
 
 AbstractProduct::AbstractProduct(){
 }
@@ -32,15 +32,20 @@ string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //}
     string serializedStr;
     GameStartNtf gameStartNtf;
-    gameStartNtf.ParseFromString(msg);
+    if (!gameStartNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message GameStartNtf error." << endl;
+        return serializedStr;
+    }
     int index = 0;
     int iUserNum = gameStartNtf.userinfo_size();
     cout << gameStartNtf.gamename() << endl;
     cout << iUserNum << endl;
+    string aiName = robot.GetAiName();
     for (index = 0; index < iUserNum; ++index)//寻找自己的座位号:0-2
     {
-        cout << "iUserNum: " << iUserNum << ", aiName: " << robot.aiName << ", netname:" << gameStartNtf.userinfo(index).username() << endl;
-        if (gameStartNtf.userinfo(index).username() == robot.aiName)
+        cout << "total userNum: " << iUserNum << ", robot name: " << aiName << ", netname:" << gameStartNtf.userinfo(index).username() << endl;
+        if (gameStartNtf.userinfo(index).username() == aiName)
         {
             break;
          }
@@ -52,7 +57,7 @@ string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
     }
     else
     {
-        robot.SetSelfSeat(index);
+        robot.SetAiSeat(index);
         cout << "Set robot seat successed, seat is: " << index << endl;
     }
     return serializedStr;
@@ -76,29 +81,29 @@ string InitHardCard::operation( OGLordRobotAI& robot, const string& msg ){
     //}
     string serializedStr;
     DealCardNtf dealCardNtf;
-    dealCardNtf.ParseFromString(msg);
+    if (!dealCardNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message DealCardNtf error." << endl;
+        return serializedStr;
+    }
+    int aiSeat = robot.GetAiSeat();
+    cout << "my seat is: " << aiSeat << endl;
+    if (-1 == aiSeat)
+    {
+        cout << "Not init seat info." << endl;
+        return serializedStr;
+    }
     int hearderSeat = dealCardNtf.headerseat();
-    int cardsSize = dealCardNtf.cards(robot.aiSeat).cards_size();//查看自己的那手牌信息
+    int cardsSize = dealCardNtf.cards(aiSeat).cards_size();//查看自己的那手牌信息
 
     vector<int> vecHandCard;
     for (int index = 0; index < cardsSize; ++index)//获取自己的那手牌
     {
-        vecHandCard.push_back(dealCardNtf.cards(robot.aiSeat).cards(index));
+        vecHandCard.push_back(dealCardNtf.cards(aiSeat).cards(index));
     }
-    robot.RbtInInitCard(vecHandCard);
+    robot.RbtInInitCard(aiSeat, vecHandCard);
     cout << "Init hand card successed, hand card info is: " << endl;
-    printIntVector(vecHandCard);
-
-    //if (hearderSeat == robot.aiSeat)
-    //{
-    //    //叫分
-    //    UserCallScoreNtf userCallScoreNtf;
-    //    userCallScoreNtf.set_seatno(robot.aiSeat);
-    //    userCallScoreNtf.set_seatnext((robot.aiSeat + 1) % 3);
-    //    userCallScoreNtf.set_score(robot.myScore);
-    //    userCallScoreNtf.SerializeToString(&serializedStr);
-    //    cout << "callScore info: " << serializedStr << endl;
-    //}
+    printCardInfo(vecHandCard);
     return serializedStr;
 }
 
@@ -120,46 +125,59 @@ string GetCallScoreInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //}
     string serializedStr;
     UserCallScoreNtf userCallScoreNtf;
-    userCallScoreNtf.ParseFromString(msg);
+    if (!userCallScoreNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message UserCallScoreNtf error." << endl;
+        return serializedStr;
+    }
     int seatNo = userCallScoreNtf.seatno();
     int seatNext = userCallScoreNtf.seatnext();
     int score = userCallScoreNtf.score();
+    int aiSeat = robot.GetAiSeat();
 
     userCallScoreNtf.Clear();
-    userCallScoreNtf.set_seatno(robot.aiSeat);
+    userCallScoreNtf.set_seatno(aiSeat);
     if (-1 == seatNext)
     {
         //停止叫分，不叫
         userCallScoreNtf.set_seatnext(-1);
         userCallScoreNtf.set_score(0);
     }
-    else if ((seatNo + 1) % 3 != robot.aiSeat)
+    else if ((seatNo + 1) % 3 != aiSeat)
     {
         //没轮到自己，不叫
-        robot.curScore = score;
+        robot.RbtInCallScore(seatNo, score);
         userCallScoreNtf.set_seatnext((seatNo + 1) % 3);
         userCallScoreNtf.set_score(0);
     }
     else
     {
-        if (score >= robot.myScore)
+        int myScore = 0;
+        robot.RbtOutGetCallScore(myScore);
+        int curScore = robot.GetCurScore();
+        cout << "My score is: " << myScore << " Cur score is: " << curScore << endl;
+
+        if (score >= myScore)
         {
             //目前分数比自己的大，不叫
-            robot.curScore = score;
-            userCallScoreNtf.set_seatnext((robot.aiSeat + 1) % 3);
+            robot.RbtInCallScore(seatNo, score);
+            userCallScoreNtf.set_seatnext((aiSeat + 1) % 3);
             userCallScoreNtf.set_score(0);
+            cout << "Doesn't choose call score, curScore is: " << curScore << endl;
         }
-        else if (score == 0 && robot.curScore >= robot.myScore)
+        else if (score == 0 && robot.GetCurScore() >= myScore)
         {
             //上一个用户没叫，且上上一个用户叫的分比自己的高，不叫
-            userCallScoreNtf.set_seatnext((robot.aiSeat + 1) % 3);
+            userCallScoreNtf.set_seatnext((aiSeat + 1) % 3);
             userCallScoreNtf.set_score(0);
+            cout << "Doesn't choose call score, curScore is: " << curScore << endl;
         }
         else
         {
             //叫分
-            userCallScoreNtf.set_seatnext((robot.aiSeat + 1) % 3);
-            userCallScoreNtf.set_score(robot.myScore);
+            userCallScoreNtf.set_seatnext((aiSeat + 1) % 3);
+            userCallScoreNtf.set_score(myScore);
+            cout << "Choose call score." << endl;
         }
     }
     userCallScoreNtf.SerializeToString(&serializedStr);
@@ -184,9 +202,13 @@ string GetLordInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //}
     string serializedStr;
     LordSetNtf lordSetNtf;
-    lordSetNtf.ParseFromString(msg);
+    if (!lordSetNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message LordSetNtf error." << endl;
+        return serializedStr;
+    }
     int seatLord = lordSetNtf.seatlord();
-    robot.RbtInSetLord(seatLord);
+    robot.SetLordSeat(seatLord);
     cout << "Set lord info successed, " << seatLord << endl;
     return serializedStr;
 }
@@ -206,23 +228,22 @@ string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //    repeated int32 basecards = 1;   // 底牌数据
     //}
     string serializedStr;
-    if (robot.aiSeat != robot.lordSeat)
+    SendBaseCardNtf sendBaseCardNtf;
+    if (!sendBaseCardNtf.ParseFromString(msg))
     {
-        //自己不是地主，不使用底牌
-        cout << "Doesn't use base card." << endl;
+        cout << "parse pb message SendBaseCardNtf error." << endl;
         return serializedStr;
     }
-    SendBaseCardNtf sendBaseCardNtf;
-    sendBaseCardNtf.ParseFromString(msg);
     int baseCardSize = sendBaseCardNtf.basecards_size();
+    int seatLord = robot.GetLordSeat();
     vector<int> vecBaseCard;
     for (int index = 0; index < baseCardSize; ++index)
     {
         vecBaseCard.push_back(sendBaseCardNtf.basecards(index));
     }
-    robot.RbtSetBaseCard(vecBaseCard);
+    robot.RbtInSetLord(seatLord, vecBaseCard);
     cout << "Set base card successed." << endl;
-    printIntVector(vecBaseCard);
+    printCardInfo(vecBaseCard);
     return serializedStr;
 }
 
@@ -246,7 +267,11 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //}
     string serializedStr;
     TakeoutCardNtf takeoutCardNtf;
-    takeoutCardNtf.ParseFromString(msg);
+    if (!takeoutCardNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message TakeoutCardNtf error." << endl;
+        return serializedStr;
+    }
     int seatno = takeoutCardNtf.seatno();
     int seatnext = takeoutCardNtf.seatnext();
     int cardsNum = takeoutCardNtf.cards_size();
@@ -256,18 +281,25 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
         vecOppTackOutCard.push_back(takeoutCardNtf.cards(index));
     }
     cout << "Current card info is:" << endl;
-    printIntVector(vecOppTackOutCard);
-    if (seatnext == robot.aiSeat)
+    printCardInfo(vecOppTackOutCard);
+    robot.RbtInTakeOutCard(seatno, vecOppTackOutCard);
+
+    int aiSeat = robot.GetAiSeat();
+    if (seatnext == aiSeat)
     {
+        cout << "It's my turn to take out card." << endl;
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
+        cout << "My take out cards is:" << endl;
+        printCardInfo(vecTackOutCard);
+
         takeoutCardNtf.Clear();
         //出牌
-        takeoutCardNtf.set_seatno(robot.aiSeat);
-        takeoutCardNtf.set_seatnext((robot.aiSeat + 1) % 3);
+        takeoutCardNtf.set_seatno(aiSeat);
+        takeoutCardNtf.set_seatnext((aiSeat + 1) % 3);
         for (int iIndex = 0; iIndex != vecTackOutCard.size(); ++iIndex)
         {
-            takeoutCardNtf.set_cards(iIndex, vecTackOutCard[iIndex]);
+            takeoutCardNtf.add_cards(vecTackOutCard[iIndex]);
         }
         //都有哪些类型?
         takeoutCardNtf.set_cardtype(1);
@@ -275,13 +307,10 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
         takeoutCardNtf.SerializeToString(&serializedStr);
         //JsonFormat.searialJsonMsg();
         cout << "Take out card successed!" << endl;
-        printIntVector(vecTackOutCard);
     }
     else
     {
-        robot.RbtInTakeOutCard(seatno, vecOppTackOutCard);
-        cout << "It's not my turn to take out card." << endl;
-        printIntVector(vecOppTackOutCard);
+        cout << "It's not my turn to take out card, card info is:" << endl;
     }
     return serializedStr;
 }
@@ -303,7 +332,11 @@ string GetGameOverInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
     GameOverNtf gameOverNtf;
-    gameOverNtf.ParseFromString(msg);
+    if (!gameOverNtf.ParseFromString(msg))
+    {
+        cout << "parse pb message GameOverNtf error." << endl;
+        return serializedStr;
+    }
     int reason = gameOverNtf.reason();
     robot.RbtResetData();
     cout << "Receved game over notify successed." << endl;
@@ -325,7 +358,14 @@ string GetCallScoreResultInfo::operation( OGLordRobotAI& robot, const string& ms
     //}
     //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
-    cout << "Get call score result successed." << endl;
+    CallScoreAck callScoreAck;
+    if (!callScoreAck.ParseFromString(msg))
+    {
+        cout << "parse pb message CallScoreAck error." << endl;
+        return serializedStr;
+    }
+    int result = callScoreAck.result();
+    cout << "Get call score result successed, call score result is: " << result << endl;
     return serializedStr;
 }
 
@@ -345,18 +385,14 @@ string GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& 
     //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
     TakeoutCardAck takeoutCardAck;
-    takeoutCardAck.ParseFromString(msg);
+    if (!takeoutCardAck.ParseFromString(msg))
+    {
+        cout << "parse pb message TakeoutCardAck error." << endl;
+        return serializedStr;
+    }
     int result = takeoutCardAck.result();
     cout << "Get take out result successed, " << result << endl;
     return serializedStr;
 }
 
-void printIntVector(vector<int>& vecContent)
-{
-    for (vector<int>::iterator it = vecContent.begin(); it != vecContent.end(); ++it)
-    {
-        cout << POINT_CHAR[(*it) / 4] << " ";
-    }
-    cout << "" << endl;
-}
 

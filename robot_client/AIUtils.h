@@ -153,5 +153,8 @@ void printPoints(int points[CARD_POINT_NUM], char endChar);
 void printHand(Hand &hand);
 
 void printHandsMap(std::map<HandType, std::vector<Hand> > &handsMap);
+
+void printCardInfo( std::vector<int>& vecContent );
+
 }
 #endif // AIUtils_h__

@@ -15,7 +15,8 @@ using namespace std;
 
 static int iIndex = 0;
 map<int, string> mapMsg;
-int msgQueue[] = {PBGameDDZ::NOTIFY_STARTGAME, PBGameDDZ::NOTIFY_DEALCARD, PBGameDDZ::NOTIFY_SETLORD, PBGameDDZ::NOTIFY_TAKEOUT, PBGameDDZ::NOTIFY_GAMEOVER};
+int msgQueue[] = {PBGameDDZ::NOTIFY_STARTGAME, PBGameDDZ::NOTIFY_DEALCARD, PBGameDDZ::NOTIFY_CALLSCORE, PBGameDDZ::NOTIFY_SETLORD, \
+                  PBGameDDZ::NOTIFY_BASECARD, PBGameDDZ::NOTIFY_TAKEOUT, PBGameDDZ::NOTIFY_GAMEOVER};
 int main(int argc, char** argv)
 {
     makeSendData(mapMsg);
@@ -54,6 +55,7 @@ void accept_cb(int fd, short events, void* arg)
     evutil_make_socket_nonblocking(sockfd);
     printf("accept a client %d\n", sockfd);
     iIndex = 0;
+    makeSendData(mapMsg);
     struct event_base* base = (event_base*)arg;
     bufferevent* bev = bufferevent_socket_new(base, sockfd, BEV_OPT_CLOSE_ON_FREE);
     bufferevent_setcb(bev, socket_read_cb, NULL, event_cb, arg);
@@ -68,7 +70,7 @@ void socket_read_cb(bufferevent* bev, void* arg)
     printf("recv the client msg: %s", msg);    
     string strInfo = mapMsg[msgQueue[iIndex]];
     bufferevent_write(bev, strInfo.c_str(), strInfo.length());
-    iIndex = (iIndex + 1) % 5;
+    iIndex = (iIndex + 1) % 7;
 }
 
 void event_cb(struct bufferevent *bev, short event, void *arg)

@@ -2,72 +2,265 @@
 #define OGLordRobotAI_h__
 
 #pragma once
+#include "OGLordRobotAIInterface.h"
 #include "Robot.h"
-#include <string>
+
 #include <vector>
 #include <map>
 #include <set>
 #include <algorithm>
 #include <numeric>
+#include <string>
 #include <iostream>
-using namespace std;
 
 class OGLordRobotAI
 {
 public:
-	OGLordRobotAI( const string& robotName );
+	OGLordRobotAI( const std::string& robotName );
 	~OGLordRobotAI(void);
 
-    //【叫分阶段】
-    // 设置自己的座位号
-    bool SetSelfSeat( int argSeat );
+	// 收到发牌消息
+	virtual bool RbtInInitCard( int argSeat,                        // 自己的座位号
+		std::vector<int> argHandCard        // 发送的手牌
+		);
 
-	// 设置自己的手牌
-	bool RbtInInitCard( vector<int> argHandCard );
+	// 输入机器人智商级别
+	virtual bool RbtInSetLevel( int argLevel);                  // 机器人智商级别
 
-	// 给出自己的叫分情况
-	bool RbtOutGetCallScore( int &callScore );
+	// 输入各个座位玩家的牌信息
+	virtual bool RbtInNtfCardInfo(  std::vector<std::vector<int> > argHandCard
+		// 各个座位玩家的手牌 0,1,2,3个元素分别表示第0,1,2号座位以及底牌的内容。
+		);
+
+	// 收到玩家叫分信息
+	virtual bool RbtInCallScore( int argSeat,                       // 座位号
+		int argCallScore                   // 叫的分数
+		);
+
+	// 请求给出叫分策略
+	virtual bool RbtOutGetCallScore( int &callScore                 // 返回值引用
+		);
+
+	// 输入玩家抢地主信息
+	virtual bool RbtInSetGrabLord( int argSeat                      // 座位号
+		);
+
+	// 输出抢地主策略
+	virtual bool RbtOutGetGrabLord( bool &grabLord                  // true：抢地主 FALSE：不抢
+		);
 
 	// 收到确定地主信息
-	bool RbtInSetLord( int argLordSeat );
+	virtual bool RbtInSetLord( int argLordSeat,                     // 地主座位
+		std::vector<int> argReceiceCard      // 地主收到的底牌
+		);
 
-    // 设置自己的底牌
-    bool RbtSetBaseCard( vector<int> argBaseCard );
 
-	//【出牌阶段】
-    // 收到玩家牌信息
-    bool RbtInTakeOutCard( int argSeat, std::vector<int> argCards);
+	// 【出牌阶段】
+	// 收到玩家牌信息
+	virtual bool RbtInTakeOutCard( int argSeat,                     // 座位号
+		std::vector<int> argCards        // 牌内容
+		);
 
 	// 请求给出出牌策略
-	bool RbtOutGetTakeOutCard( vector<int> &vecTakeOutCards );
+	virtual bool RbtOutGetTakeOutCard(std::vector<int> &vecCards    // 返回的牌
+		);
 
 
 	// 【重置机器人】
 	// 用于第二盘时复用机器人AI 以及断线续完
 	// 重置机器人信息
-	bool RbtResetData();
+	virtual bool RbtResetData();
 
-    bool isFree();
+	// 设置地主和玩家座位
+	virtual bool RbtInSetSeat( int argMySeat,                       // 自己的座位
+		int argLordSeat                      // 地主的座位
+		);
 
-    void findLowestHand(Hand &hand);
+	// 设置手牌和底牌
+	virtual bool RbtInSetCard( std::vector<int> argInitCard,        // 自己初始化的牌
+		std::vector<int> argReceiveCard      // 地主收到的底牌
+		);
+	// 设置出牌记录
+	virtual bool RbtInTakeOutRecord( std::vector<int> argTakeOutSeat,               // 历史出牌-座位记录
+		std::vector<std::vector<int> > argTakeOutRecord // 历史出牌-牌记录
+		);
+
+
+	// 【其他】
+	// 返回错误信息
+	virtual bool RbtOutGetLastError( int &errorCode);           // 返回当前错误码
+
+    //访问数据成员接口
+    virtual void SetAiName(std::string aiName);
+
+    virtual std::string GetAiName();
+
+    virtual int GetAiSeat();
+
+    virtual void SetAiSeat(int aiSeat);
+
+    virtual int GetCurScore();
+
+    virtual void SetCurScore(int curScore);
+
+    virtual int GetLordSeat();
+
+    virtual void SetLordSeat(int lordSeat);
+private:
+
+	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家
+
+	void sortHandMap();
+
+	void sortHandMapLvl();
+
+	void findLowestHand(Hand &hand);
 
 	void findHigherHand(Hand &hand);
 
-    void findHigherHandNotBomb( Hand &hand );
+	void findHigherHandNotBomb(Hand &hand);
 
-    void updateAiPosition();
+	void findMostCardsHandNotBomb(Hand &hand);
 
-    void takeOutLvl0(Hand &hand);
+	void takeOutHand(Hand &hand, std::vector<int> &takeOutCards);
 
-    void takeOutHand(Hand &hand, std::vector<int> &takeOutCards);
+	void takeOutLvl0(Hand &hand);
 
-    string aiName;//自己的名字
+	void takeOutLvl1(Hand &hand);
+
+	void takeOutHighLvl(Hand &hand);
+
+	bool isFree();
+
+	bool isDanger();
+
+	bool isGood(HandsMapSummary &hmSummary, int controlCount, int minOppNum);
+
+	bool isFirstHalf();
+
+	bool isGoodFarmer();
+
+	void findChargeHandFirst(Hand &hand, bool typeCountFirst);
+
+	void lordTakeOutFree(Hand &hand);
+
+	void lordTakeOutFreeFarmerOnly1Card(Hand &hand);
+
+	void lordTakeOutFreeFarmerOnly2Cards(Hand &hand);
+
+	void lordTakeOutFreeNormal(Hand &hand);
+
+	void lordTakeOutHigher(Hand &hand);
+
+	void lordTakeOutHigherFarmerOnly1Card(Hand &hand);
+
+	void lordTakeOutHigherFarmerOnly2Cards(Hand &hand);
+
+	void lordTakeOutHigherNormal(Hand &hand);
+
+	void lordTakeOutHigherRebuild(Hand &hand);
+
+	void farmerTakeOutLordOnly1Card(Hand &hand);
+
+	void farmerTakeOutLordOnly2Cards(Hand &hand);
+
+	void farmerMustTakeOutLordOnly1Card(Hand &hand);
+
+	void farmerMustTakeOutLordCharge(Hand &hand);
+
+	void goodFarmerOverOtherFarmer(Hand &hand);
+
+	void downGoodFarmerTakeOut(Hand &hand);
+
+	void downBadFarmerTakeOut(Hand &hand);
+
+	void upGoodFarmerTakeOut(Hand &hand);
+
+	void upBadFarmerTakeOut(Hand &hand);
+
+	void downFarmerTakeOutUpFarmerOnly1Card(Hand &hand);
+
+	void findBestHigherHandFromMap(Hand &hand);
+
+	void findBestHigherHandFromPoints(Hand &hand, bool force, bool lordOnly1Card);
+
+	void farmerTakeOutWhenLordTakeOutHighSolo(Hand &hand);
+
+	void refindForTrio(Hand &hand);
+
+	bool isDangerLvl();
+
+	bool isGoodLvl(HandsMapSummary &hmSummary, int minOppNum);
+
+	void findKickerLvl(Hand &hand);
+
+	bool containsHand(std::map<HandType, std::vector<Hand> > &allHands, Hand &hand);
+
+	void lordTakeOutFreeLvl(Hand &hand);
+
+	void lordTakeOutFreeFarmerOnly1CardLvl(Hand &hand);
+
+	void lordTakeOutFreeFarmerOnly2CardsLvl(Hand &hand);
+
+	void lordTakeOutFreeNormalLvl(Hand &hand);
+
+	void lordTakeOutHigherLvl(Hand &hand);
+
+	void lordTakeOutHigherFarmerOnly1CardLvl(Hand &hand);
+
+	void lordTakeOutHigherFarmerOnly2CardsLvl(Hand &hand);
+
+	void lordTakeOutHigherNormalLvl(Hand &hand);
+
+	void lordTakeOutHigherRebuildLvl(Hand &hand);
+
+	void farmerTakeOutLordOnly1CardLvl(Hand &hand);
+
+	void farmerTakeOutLordOnly2CardsLvl(Hand &hand);
+
+	void farmerMustTakeOutLordOnly1CardLvl(Hand &hand);
+
+	void farmerMustTakeOutLordChargeLvl(Hand &hand);
+
+	void goodFarmerOverOtherFarmerLvl(Hand &hand);
+
+	void downGoodFarmerTakeOutLvl(Hand &hand);
+
+	void downBadFarmerTakeOutLvl(Hand &hand);
+
+	void upGoodFarmerTakeOutLvl(Hand &hand);
+
+	void upBadFarmerTakeOutLvl(Hand &hand);
+
+	void downFarmerTakeOutUpFarmerOnly1CardLvl(Hand &hand);
+
+	void countHighHand(std::map<HandType, std::vector<Hand> > &allHands,
+						std::map<HandType, int> &uniHighHands,
+						std::map<HandType, int> &HighHands,
+						std::map<HandType, int> &goodLowHands,
+						int &trioCount);
+
+	HandsMapSummary getHandsMapSummaryLvl(std::map<HandType, std::vector<Hand> > &allHands,
+						std::map<HandType, int> &uniHighHands,
+						std::map<HandType, int> &HighHands,
+						std::map<HandType, int> &goodLowHands,
+						int trioCount);
+
+	int findOppHighestPoint(HandType type);
+
+	int findOppHighestChain(HandType type, int len);
+
+	int addAllValue(std::map<HandType, int> &handsCount);
+
+	void findChargeHandFirstLvl(Hand &hand, bool typeCountFirst);
+
+	bool mustHighLevel;
+
+    std::string aiName;
+
+	int level;//机器人智能等级，目前有0、1
 
 	int aiSeat;//自己的座位
-
-    Position aiPosition;//自己的角色
-
-    int myScore;//自己的叫分
 
 	int lordSeat;//地主座位
 
@@ -75,13 +268,17 @@ public:
 
 	int upSeat;//地主上方座位
 
-	std::vector<int> leftoverCards;//底牌
+	Position aiPosition;
 
-	std::vector<int> aiCardsVec;//自己手中的牌，内容是0-53
+	std::vector<int> leftoverCards;
 
-	CardsInfo playerInfo;//自己的手牌信息，以结构体的形式保存，其中牌的信息是CARD_3--RED_JOKER
+	std::vector<int> aiCardsVec;//自己手中的牌，以54位的vector保存
+
+	CardsInfo playerInfo[PLAYER_NUM];//玩家的手牌信息，以结构体的形式保存
 
 	int remainPoints[CARD_POINT_NUM];//记牌器
+
+	int otherPoints[CARD_POINT_NUM];//其他人手中的牌
 
 	std::map<HandType, std::vector<Hand> > handsMap;//当前手中牌所组成的类型，比如:炸弹是哪些，飞机是哪些
 
@@ -103,7 +300,7 @@ public:
 
 	int minOppNumber;
 
-	int curScore;//当前的叫分数
+	int curScore;
 
 	int curCaller;
 
@@ -113,7 +310,7 @@ public:
 
 	std::vector<std::pair<int, int> > callHistory;
 
-	std::vector<std::pair<int, Hand> > history;//出牌历史记录
+	std::vector<std::pair<int, Hand> > history;
 
 	int errCode;
 };

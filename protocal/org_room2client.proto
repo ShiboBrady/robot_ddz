@@ -1,0 +1,200 @@
+package YLYQ.Protocol.org_room2client;
+
+// msgId range[2001, 2499]
+enum OrgRoomMsgId {
+    // 游戏场快速开始请求，对应消息 OrgRoomDdzQuickStartReq 
+    MSGID_DDZ_QUICK_START_REQ = 2001;
+    // 游戏场快速开始应答，对应消息 OrgRoomDdzQuickStartAck
+    MSGID_DDZ_QUICK_START_ACK = 2002;
+    // 退出请求，对应消息 OrgRoomDdzQuitReq
+    MSGID_DDZ_QUIT_REQ = 2003;
+    // 退出应答，对应消息 OrgRoomDdzQuitAck
+    MSGID_DDZ_QUIT_ACK = 2004;
+    // 房间状态请求，对应消息 OrgRoomDdzRoomStatReq
+    MSGID_DDZ_ROOM_STAT_REQ = 2005;
+    // 房间状态应答，对应消息 OrgRoomDdzRoomStatAck
+    MSGID_DDZ_ROOM_STAT_ACK = 2006;
+
+    // 查询报名条件请求，对应消息 OrgRoomDdzSignUpConditionReq 
+    MSGID_DDZ_SIGN_UP_CONDITION_REQ = 2011;
+    // 查询报名条件应答，对应消息 OrgRoomDdzSignUpConditionAck
+    MSGID_DDZ_SIGN_UP_CONDITION_ACK = 2012;
+    // 报名请求，对应消息 OrgRoomDdzSignUpReq 
+    MSGID_DDZ_SIGN_UP_REQ = 2013;
+    // 报名应答，对应消息 OrgRoomDdzSignUpAck
+    MSGID_DDZ_SIGN_UP_ACK = 2014;
+    // 取消报名请求，对应消息 OrgRoomDdzCancelSignUpReq 
+    MSGID_DDZ_CANCEL_SIGN_UP_REQ = 2015;
+    // 取消报名应答，对应消息 OrgRoomDdzCancelSignUpAck 
+    MSGID_DDZ_CANCEL_SIGN_UP_ACK = 2016;
+
+    // 游戏结果(游戏场、比赛场通用)，对应消息 OrgRoomDdzGameResultNtf
+    MSGID_DDZ_GAME_RESULT_NTF = 2100;
+    // 游戏开始(游戏场、比赛场通用)，对应消息 OrgRoomDdzStartGameNtf
+    //MSGID_DDZ_START_GAME_NTF = 2101;
+    // 比赛场基数（底分）变化通知，对应消息 OrgRoomDdzBasicScoreChangeNtf 
+    MSGID_DDZ_MATCH_BASIC_SCORE_CHANGE_NTF = 2102;
+    // 比赛结束通知，对应消息 OrgRoomDdzMatchOverNtf 
+    MSGID_DDZ_MATCH_OVER_NTF = 2103;
+}
+
+// 通用信息结构 >>> START
+/*
+message PlayerInfo {                // 玩家信息
+    required string userId = 1;     // 玩家ID
+    required string nickname = 2;   // 昵称
+    optional int64 chips = 3;       // 筹码数
+    optional int32 avatarType = 4;  // 1-系统头像, 2-自定义头像
+    optional string avatarId = 5;   // 如果是自定义头像, 则表示头像地址
+    optional int64 exp = 6;         // 经验值
+    optional int32 vipPoints = 7;   // vip积分
+    optional int32 innings = 8;     // 游戏局数
+    optional int32 winInnings = 9;  // 赢的局数
+    required int32 sex = 10; 
+}
+*/
+// 通用信息结构 <<< END
+
+// >>> 游戏场消息
+// 查询房间状态
+message OrgRoomDdzRoomStatReq {
+    repeated int32 roomIds = 1;     // 房间/比赛 ID 列表
+}
+
+message OrgRoomDdzRoomStatAck {
+    required int32 result = 1;
+    message RoomStat {
+        required int32 roomId = 1;  // 比赛/比赛 ID 
+        required int32 userCount = 2;// 人数
+    }
+    repeated RoomStat stat = 2;
+}
+
+message OrgRoomDdzQuickStartReq {
+    required int32 roomid = 1;
+}
+
+message OrgRoomDdzQuickStartAck {
+    required int32 result = 1;
+}
+
+message OrgRoomDdzQuitReq {
+    required int32 roomid = 1;
+}
+
+message OrgRoomDdzQuitAck {
+    required int32 result = 1;
+}
+// <<< 游戏场消息
+
+// 游戏开始(游戏场和比赛场通用)
+/*
+message OrgRoomDdzStartGameNtf {
+    required string gameName = 1;       // 游戏名称
+    required int32 basicScore = 2;      // 底分
+    repeated PlayerInfo playerInfo  = 3;// 玩家信息
+    message MatchInfo {
+        required int32 stageNum = 1;    // 第几轮
+        required int32 inningNum= 2;    // 第几局
+        required int32 selfPlace = 3;   // 自己的名次
+        required int32 userCount = 4;   // 总人数
+    }
+    optional MatchInfo matchInfo = 4;   // 如果是游戏场，该字段不用
+}
+*/
+
+// 游戏结果(游戏场和比赛场通用)
+message OrgRoomDdzGameResultNtf {
+    required int32 seatlord = 1;        // 地主的座位号
+    required int32 seatwin = 2;         // 胜利座位
+    required int32 multiple_base = 3;   // 基础倍数(叫分值)
+    required int32 bombs = 4;           // 普通炸弹个数
+    required bool  hasrocket = 5;       // 是否有火箭
+    required bool  hasspring = 6;       // 是否春天
+    required string guid = 7;
+    message UserResult {
+        required string userId = 1;
+        required int64 chip_change = 2; // 筹码变化
+        required int64 chip_now = 3;    // 当前筹码
+        repeated int32 cards = 4;       // 玩家手牌
+    }
+    repeated UserResult userresult = 8;
+    required int32 tax = 9;             // 服务费
+    required int32 incExp = 10;         // 增加的经验值
+    required int32 incVipPoints = 11;   // 增加的竞技点
+}
+
+// >>> 比赛场
+message OrgRoomDdzSignUpConditionReq {
+    required int32 matchId = 1;     // 比赛 ID
+}
+
+message OrgRoomDdzSignUpConditionAck {
+    required int32 result = 1;
+    message Limit {
+        required bool enable = 1;   // 是否满足条件
+        optional string desc = 2;   // 条件描述, 大厅配置获取中
+    }
+    message Cost {
+        required int32 id = 1;      // 费用ID
+        required string desc = 2;   // 费用描述
+        required bool enable = 3;   // 是否满足
+        required bool signed = 4;   // 是否已报名
+    }
+    optional Limit limit = 2;
+    repeated Cost costList = 3;
+    optional int32 sysTime = 4;     // 系统时间, time_t
+    optional int32 startTime = 5;   // 对于定时赛，返回开赛时间, time_t
+    optional int32 startSignUpTime = 6; // 开始报名时间, time_t
+    optional int32 endSignUpTime = 7;   // 结束报名时间, time_t
+}
+
+message OrgRoomDdzSignUpReq {
+    required int32 matchId = 1;     // 比赛 ID
+    optional int32 costId = 2;      // 免费场不填或填0
+}
+
+message OrgRoomDdzSignUpAck {
+    required int32 result = 1;
+    message CostGoods {
+        required string name = 1;   // 消耗物品名称 chips-筹码, vipPoints-竞技点
+        required int32 count = 2;   // 消耗物品数量
+    }
+    repeated CostGoods costList = 2;
+    optional int32 userCount = 3;   // 已报名人数
+}
+
+message OrgRoomDdzCancelSignUpReq {
+    required int32 matchId = 1;     // 比赛 ID
+}
+
+message OrgRoomDdzCancelSignUpAck {
+    required int32 result = 1;
+    message revertGoods {
+        required string name = 1;   // 消耗物品名称 chips-筹码, vipPoints-竞技点
+        required int32 count = 2;   // 消耗物品数量
+    }
+    // 返还的物品
+    repeated revertGoods revertList = 2;
+}
+
+message OrgRoomDdzBasicScoreChangeNtf {
+    required int32 basicScore = 1;     // 将要变成的底分值
+    optional int32 afterSeconds = 2;   // 如果有值，表示在多少秒后变化
+}
+
+message OrgRoomDdzMatchOverNtf {
+    required int32 matchId = 1;        // 比赛ID
+    required int32 selfPlace = 2;      // 自己的名次
+    required int32 userCount = 3;      // 总人数
+    message rewardGoods {
+        required string name = 1;      // 物品名称 chips-筹码, vipPoints-竞技点
+        required int32 count = 2;      // 物品数量
+    }
+    // 奖励的物品
+    repeated rewardGoods rewardList = 4;
+}
+
+// <<< 比赛场
+
+

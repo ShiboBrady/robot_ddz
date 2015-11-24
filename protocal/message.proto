@@ -1,0 +1,39 @@
+package YLYQ.Protocol.message;
+
+/*
++----------------+----------+----------------------------+
++  len(Message)  |   msgId  |           Message          |
++----------------+----------+-----------+----------------+
++                           |   Head    |     body       |
++----------------+----------+-----------+----------------+
++    4 bytes     |  4 bytes |  12 bytes | len - 12 bytes |
++----------------+---------------------------------------+
+*/
+
+message Head {
+    required int32 version = 1;
+    required int32 sequence = 2;
+    required int32 timestamp = 3;
+}
+
+message Message {
+    required Head head = 1;
+    optional bytes body = 2;
+}
+
+enum ErrorCode {
+    SUCCESS = 0;
+    ERR_PROTOCOL = 1;
+    ERR_SERVER = 2;
+    ERR_STORAGE = 3;
+    
+    ERR_INVALID_USER = 101;
+    ERR_NO_TABLE = 102;
+    ERR_INVALID_TABLE = 103;
+    ERR_INVALID_SEATNO = 104;
+    ERR_CHIPS_NOT_ENOUGH = 105;
+    ERR_INVALID_BET = 106;
+    ERR_USER_STATE = 107;
+    ERR_SLOT_SERVER = 108;
+}
+

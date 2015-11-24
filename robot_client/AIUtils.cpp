@@ -1749,9 +1749,9 @@ void AIUtils::handToPointsArray( Hand &hand, int points[CARD_POINT_NUM] )
 
 void AIUtils::printPoints( int points[CARD_POINT_NUM], char endChar )
 {
-	for (int i=0; i<CARD_POINT_NUM; ++i)
+	for (int i = 0; i < CARD_POINT_NUM; ++i)
 	{
-		for (int j=0; j<points[i]; ++j)
+		for (int j = 0; j < points[i]; ++j)
 		{
 			cout << POINT_CHAR[i];
 		}
@@ -1777,6 +1777,14 @@ void AIUtils::printHandsMap( std::map<HandType, std::vector<Hand> > &handsMap )
 		}
 	}
 	cout << endl;
+}
+
+void AIUtils::printCardInfo( vector<int>& vecContent )
+{
+    int points[CARD_POINT_NUM] = {0};
+	cardVecToPointArr(vecContent, points);
+	printPoints(points, ' ');
+    cout << endl;
 }
 
 int AIUtils::getHandCount( Hand &hand )

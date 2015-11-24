@@ -47,12 +47,20 @@ string RobotCenter::RobotProcess(string msg)
     //处理消息
     AbstractFactory* factory = new SimpleFactory();
     AbstractProduct* product = factory->createProduct(msgId);
+    if (NULL == product)
+    {
+        cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
+        return result;
+    }
     result = product->operation(robot, pbBody);
     if ("" != result)
     {
         //序列化消息
         cout << "Before searial: " << result << endl;
         result = jsonFormat.searialJsonPush(jsReq.channel, jsReq.source, jsReq.body.username, jsReq.body.msgID, jsReq.seq, result);
+        char tmp[4];
+        sprintf(tmp, "%4d", int(result.length()));
+        result = string(tmp) + result;
         cout << "After searial: " << result << endl;
     }
     return result;

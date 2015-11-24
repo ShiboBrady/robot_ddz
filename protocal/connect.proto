@@ -1,0 +1,55 @@
+package YLYQ.Protocol.connect;
+
+// msgId range[1, 99]
+enum ConnectMsgId {
+    MSGID_NULL = 0;
+
+    MSGID_HEARTBEAT_NTF = 10;
+
+    MSGID_VERIFY_REQ = 11;
+    MSGID_VERIFY_ACK = 12;
+
+    MSGID_INIT_GAME_REQ = 13;
+    MSGID_INIT_GAME_ACK = 14;
+
+    MSGID_DESTROY_GAME_REQ = 15;
+    MSGID_DESTROY_GAME_ACK = 16;
+}
+
+// 心跳消息
+message HeartbeatNtf {
+    optional string rev = 1;
+}
+
+// 请求认证(认证通过后才能进行其它通讯)
+message VerifyReq {
+    required string userId = 1;
+    required string sessionKey = 2;
+}
+
+message VerifyAck {
+    required int32 result = 1;
+    optional string gameName = 2;       // 如果正在游戏中，返回游戏名称，客户端进行初始化，自动快速开始
+}
+
+// 初始化游戏(进入游戏前必须先初始化)
+message InitGameReq {
+    // [type: "ddz", name: "ddz_match_1"]
+    required string type = 1;   // "slot"
+    required string name = 2;  // "s3"
+}
+
+message InitGameAck {
+    required int32 result = 1;
+}
+
+// 销毁游戏(退出游戏后必须销毁)
+message DestroyGameReq {
+    optional string type = 1;
+    optional string name = 2;
+}
+
+message DestroyGameAck {
+    required int32 result = 1;
+}
+
