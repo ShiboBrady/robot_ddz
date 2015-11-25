@@ -22,11 +22,25 @@ NetLib::NetLib()
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port_);
     inet_aton(ip_.c_str(), &server_addr.sin_addr);
-    base = event_base_new();
+    //base = event_base_new();
+    base = event_init();
+    cout << ip_ << " " << port_ << endl;
 
     //心跳协议的定时器初始化
     timerEventHeartBeat.tv_sec = heartBeatTime_;
     timerEventHeartBeat.tv_usec = 0;
+
+    //机器人初始化的定时器初始化
+    timerEventSignIn.tv_sec = initTime_;
+    timerEventSignIn.tv_usec = 0;
+
+    //验证身份的定时器初始化
+    timerEventSignIn.tv_sec = verifyTime_;
+    timerEventSignIn.tv_usec = 0;
+
+    //初始化游戏的定时器初始化
+    timerEventSignIn.tv_sec = initGameTime_;
+    timerEventSignIn.tv_usec = 0;
 
     //报名的定时器初始化
     timerEventSignIn.tv_sec = signUpTime_;
@@ -66,15 +80,15 @@ void NetLib::connect()
     cout << "Total init " << index << " robots and connections." << endl;
 
     //添加心跳协议定时器
-    //pBevNode aBevNode = new BevNode(this, bev);
-    //evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, (void*)(aBevNode));
-    //event_add(&ev_timer_heart_beat, &timerEventHeartBeat);
-    //cout << "Heart beat started!" << endl;
+    pBevNode aBevNode = new BevNode(this, &bev, &unSignUpList);
+    evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, (void*)(aBevNode));
+    event_add(&ev_timer_heart_beat, &timerEventHeartBeat);
+    cout << "Heart beat started!" << endl;
 
     //添加报名定时器
-    //evtimer_set(&ev_timer_sign_in, sign_up_time_cb, (void*)(aBevNode));
-    //event_add(&ev_timer_sign_in, &timerEventSignIn);
-    //cout << "Sign up started!" << endl;
+    evtimer_set(&ev_timer_sign_in, sign_up_time_cb, (void*)(aBevNode));
+    event_add(&ev_timer_sign_in, &timerEventSignIn);
+    cout << "Sign up started!" << endl;
 
 }
 
@@ -159,9 +173,9 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
 {
     pBevNode aBevNode = static_cast<pBevNode>(arg);
     NetLib* netlib = aBevNode->netlib;
-    vector<struct bufferevent*> allBev = aBevNode->bev;
+    vector<struct bufferevent*>* allBev = aBevNode->bev;
     char msg[] = "timer wakeup\n";
-    for (vector<struct bufferevent*>::iterator it = allBev.begin(); it != allBev.end(); ++it)
+    for (vector<struct bufferevent*>::iterator it = allBev->begin(); it != allBev->end(); ++it)
     {
         bufferevent_write(*it, msg, strlen(msg));
     }
@@ -169,12 +183,41 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
     event_add(&(netlib->ev_timer_heart_beat), &(netlib->timerEventHeartBeat));/*重新添加定时器*/
 }
 
+void NetLib::init_time_cb(int fd, short events, void* arg)
+{
+
+}
+
+void NetLib::verify_time_cb(int fd, short events, void* arg)
+{
+
+}
+
+void NetLib::init_game_time_cb(int fd, short events, void* arg)
+{
+
+}
+
+
 void NetLib::sign_up_time_cb(int fd, short events, void* arg)
 {
     pBevNode aBevNode = static_cast<pBevNode>(arg);
     NetLib* netlib = aBevNode->netlib;
-    vector<struct bufferevent*> allBev = aBevNode->bev;
+    vector<struct bufferevent*>* allBev = aBevNode->bev;
+    std::map<RobotCenter*, int>* allUnSignUpRobot = aBevNode->unSignUpList;
 
+    //遍历未报名机器人队表
+    for (map<RobotCenter*, int>::iterator it = allUnSignUpRobot->begin(); it != allUnSignUpRobot->end(); ++it)
+    {
+        RobotCenter* robotCenter = it->first;
+        int index = it->second;
+        struct bufferevent* bev = (*allBev)[index];
+    }
+
+    //查询进场条件
+
+
+    cout << "send sign up req successed." << endl;
     event_add(&(netlib->ev_timer_sign_in), &(netlib->timerEventSignIn));/*重新添加定时器*/
 }
 
@@ -196,7 +239,7 @@ bool NetLib::Init()
     bResult = confAccess->GetValue("robot", "robotNum", strRobotNum, "1");
     bResult = confAccess->GetValue("robot", "IQLevel", strRobotIQLevel, "0");
     bResult = confAccess->GetValue("server", "ip", strIp, "127.0.0.1");
-    bResult = confAccess->GetValue("server", "port", strIp, "9999");
+    bResult = confAccess->GetValue("server", "port", strPort, "9999");
     bResult = confAccess->GetValue("timer", "heartBeat", strHeartBeatTime, "30");
     bResult = confAccess->GetValue("timer", "signUp", strSignUpTime, "30");
     if (bResult)
