@@ -8,12 +8,12 @@
 class RobotCenter
 {
 public:
-    RobotCenter();
+    RobotCenter( const int robotId, const int robotIQLevel );
     ~RobotCenter();
 
     std::string RobotProcess(std::string msg);
 private:
-    std::map<std::string, OGLordRobotAI> mMapRobotList_;
+    OGLordRobotAI _Robot;
 };
 
 #endif /*__ROBOTCENTER_H__*/

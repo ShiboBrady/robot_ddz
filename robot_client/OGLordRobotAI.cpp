@@ -4,13 +4,13 @@
 using namespace std;
 using namespace AIUtils;
 
-OGLordRobotAI::OGLordRobotAI( const string& robotName )
-    :aiName(robotName),
-     level(0),
+OGLordRobotAI::OGLordRobotAI( const int robotId, const int IQLevel )
+    :robotId(robotId),
+     level(IQLevel),
      lordSeat(-1),     //地主位置
      aiSeat(-1),       //自己的位置
      curHandSeat(-1),  //当前出牌位置
-     curCaller(0),     //当前叫分的人
+     curCaller(-1),     //当前叫分的人
      curScore(0)       //当前的叫分
 
 {
@@ -324,14 +324,14 @@ bool OGLordRobotAI::RbtResetData()
 	return true;
 }
 
-void OGLordRobotAI::SetAiName(std::string aiName)
+void OGLordRobotAI::SetRobotId( const int robotId )
 {
-    this->aiName = aiName;
+    this->robotId= robotId;
 }
 
-std::string OGLordRobotAI::GetAiName()
+int OGLordRobotAI::GetRobotId()
 {
-    return aiName;
+    return robotId;
 }
 
 int OGLordRobotAI::GetAiSeat()
@@ -342,7 +342,6 @@ int OGLordRobotAI::GetAiSeat()
 void OGLordRobotAI::SetAiSeat(int aiSeat)
 {
     this->aiSeat = aiSeat;
-    cout << "aiseat : " << this->aiSeat <<  endl;
 }
 
 int OGLordRobotAI::GetCurScore()

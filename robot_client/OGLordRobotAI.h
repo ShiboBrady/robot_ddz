@@ -16,7 +16,7 @@
 class OGLordRobotAI
 {
 public:
-	OGLordRobotAI( const std::string& robotName );
+	OGLordRobotAI( const int robotId, const int IQLevel );
 	~OGLordRobotAI(void);
 
 	// 收到发牌消息
@@ -91,9 +91,9 @@ public:
 	virtual bool RbtOutGetLastError( int &errorCode);           // 返回当前错误码
 
     //访问数据成员接口
-    virtual void SetAiName(std::string aiName);
+    virtual void SetRobotId( const int robotId );
 
-    virtual std::string GetAiName();
+    virtual int GetRobotId();
 
     virtual int GetAiSeat();
 
@@ -256,7 +256,7 @@ private:
 
 	bool mustHighLevel;
 
-    std::string aiName;
+    int robotId;//机器人id
 
 	int level;//机器人智能等级，目前有0、1
 

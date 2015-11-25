@@ -5,10 +5,9 @@
 
 using namespace std;
 
-RobotCenter::RobotCenter()
+RobotCenter::RobotCenter( const int robotId, const int robotIQLeve )
+    :_Robot(robotId, robotIQLeve)
 {
-    string robotName = "zhangsan";
-    mMapRobotList_.insert(make_pair(robotName, OGLordRobotAI(robotName)));
 }
 
 RobotCenter::~RobotCenter()
@@ -30,16 +29,6 @@ string RobotCenter::RobotProcess(string msg)
         return result;
     }
 
-    //判断是哪个机器人
-    string robotName = jsReq.body.username;
-    map<string, OGLordRobotAI>::iterator it = mMapRobotList_.find(robotName);
-    if (it == mMapRobotList_.end())
-    {
-        cout << "There doesn't has robot:" << robotName << endl;
-        return result;
-    }
-    OGLordRobotAI& robot = it->second;
-
     //判断消息类型
     int msgId = jsReq.body.msgID;
     string pbBody = jsReq.body.pbMsg;
@@ -52,7 +41,7 @@ string RobotCenter::RobotProcess(string msg)
         cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
         return result;
     }
-    result = product->operation(robot, pbBody);
+    result = product->operation(_Robot, pbBody);
     if ("" != result)
     {
         //序列化消息

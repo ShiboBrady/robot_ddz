@@ -41,11 +41,11 @@ string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
     int iUserNum = gameStartNtf.userinfo_size();
     cout << gameStartNtf.gamename() << endl;
     cout << iUserNum << endl;
-    string aiName = robot.GetAiName();
+    int robotId = robot.GetRobotId();
     for (index = 0; index < iUserNum; ++index)//寻找自己的座位号:0-2
     {
-        cout << "total userNum: " << iUserNum << ", robot name: " << aiName << ", netname:" << gameStartNtf.userinfo(index).username() << endl;
-        if (gameStartNtf.userinfo(index).username() == aiName)
+        cout << "total userNum: " << iUserNum << ", robot name: " << robotId << ", netname:" << ::atoi(gameStartNtf.userinfo(index).username().c_str()) << endl;
+        if (::atoi(gameStartNtf.userinfo(index).username().c_str()) == robotId)
         {
             break;
          }

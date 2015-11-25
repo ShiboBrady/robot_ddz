@@ -48,8 +48,8 @@ void MakeTestData(map<int, string>& mapMsg)
     int baseCard[3];
     //游戏开始
     GameStartNtf gameStartNtf;
-    PromptForGameStartNtf(gameStartNtf.add_userinfo(), "zhangsan");
-    PromptForGameStartNtf(gameStartNtf.add_userinfo(), "lisi");
+    PromptForGameStartNtf(gameStartNtf.add_userinfo(), "110001");
+    PromptForGameStartNtf(gameStartNtf.add_userinfo(), "110002");
     gameStartNtf.set_gamename("ddz");
     gameStartNtf.set_basicscore(100);
     string msgGameStart;
