@@ -11,6 +11,15 @@ const int SOLO_CHAIN_CHARGE_LEN[8] = {7, 9, 11, 13, 15, 17, 18, 18};
 
 const int LAIZI_TOTAL_COUNT = 4;
 
+enum RobotStatus
+{
+    INIT = 0,   //刚初始化
+    VERIFIED,   //验证通过
+    INITGAME,   //游戏初始化通过
+    CANSINGUP,  //可以报名
+    SIGNUPED,   //报名成功
+};
+
 enum CardPoint
 {
 	CARD_3 = 0,

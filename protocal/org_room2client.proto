@@ -1,3 +1,4 @@
+syntax = "proto2";
 package YLYQ.Protocol.org_room2client;
 
 // msgId range[2001, 2499]

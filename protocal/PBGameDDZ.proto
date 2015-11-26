@@ -1,3 +1,4 @@
+syntax = "proto2";
 package PBGameDDZ;
 
 /* ddz game msgid limits 5000-5100 */

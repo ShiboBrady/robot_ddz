@@ -13,6 +13,53 @@ public:
     virtual string operation( OGLordRobotAI& robot, const string& msg ) = 0;
 };
 
+//请求认证回应
+class GetVerifyAckInfo:public AbstractProduct{
+
+public:
+    GetVerifyAckInfo();
+    virtual ~GetVerifyAckInfo();
+
+public:
+    string operation( OGLordRobotAI& robot, const string& msg );
+};
+
+//初始化游戏回应
+class GetInitGameAckInfo:public AbstractProduct{
+
+public:
+    GetInitGameAckInfo();
+    virtual ~GetInitGameAckInfo();
+
+public:
+    string operation( OGLordRobotAI& robot, const string& msg );
+};
+
+//查询报名条件回应
+class GetSignUpCondAckInfo:public AbstractProduct{
+
+public:
+    GetSignUpCondAckInfo();
+    virtual ~GetSignUpCondAckInfo();
+
+public:
+    string operation( OGLordRobotAI& robot, const string& msg );
+};
+
+//报名回应
+class GetSignUpAckInfo:public AbstractProduct{
+
+public:
+    GetSignUpAckInfo();
+    virtual ~GetSignUpAckInfo();
+
+public:
+    string operation( OGLordRobotAI& robot, const string& msg );
+};
+
+
+/*++++++++++++++++++游戏阶段 开始++++++++++++++++++++++*/
+
 //游戏开始
 class GetGameStartInfo:public AbstractProduct{
 
@@ -111,5 +158,7 @@ public:
 public:
     string operation( OGLordRobotAI& robot, const string& msg );
 };
+
+/*++++++++++++++++++游戏阶段 结束++++++++++++++++++++++*/
 #endif
 

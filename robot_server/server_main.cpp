@@ -19,7 +19,7 @@ int msgQueue[] = {PBGameDDZ::NOTIFY_STARTGAME, PBGameDDZ::NOTIFY_DEALCARD, PBGam
                   PBGameDDZ::NOTIFY_BASECARD, PBGameDDZ::NOTIFY_TAKEOUT, PBGameDDZ::NOTIFY_GAMEOVER};
 int main(int argc, char** argv)
 {
-    makeSendData(mapMsg);
+    //makeSendData(mapMsg);
     // for (map<int, string>::iterator it = mapMsg.begin(); it != mapMsg.end(); ++it)
     // {   
     //     printf("%d : %s\n", it->first, it->second.c_str());
@@ -55,7 +55,7 @@ void accept_cb(int fd, short events, void* arg)
     evutil_make_socket_nonblocking(sockfd);
     printf("accept a client %d\n", sockfd);
     iIndex = 0;
-    makeSendData(mapMsg);
+    //makeSendData(mapMsg);
     struct event_base* base = (event_base*)arg;
     bufferevent* bev = bufferevent_socket_new(base, sockfd, BEV_OPT_CLOSE_ON_FREE);
     bufferevent_setcb(bev, socket_read_cb, NULL, event_cb, arg);
@@ -67,10 +67,20 @@ void socket_read_cb(bufferevent* bev, void* arg)
     char msg[4096];
     size_t len = bufferevent_read(bev, msg, sizeof(msg));
     msg[len] = '\0';
-    printf("recv the client msg: %s", msg);    
-    string strInfo = mapMsg[msgQueue[iIndex]];
-    bufferevent_write(bev, strInfo.c_str(), strInfo.length());
-    iIndex = (iIndex + 1) % 7;
+    printf("recv the client msg: %s", msg);
+    for (int i = 0; i < 5; i++)
+    {
+        char msg[] = "Hello, World!";
+        char sendmsg[1024] = {0};
+        int len = strlen(msg);
+        sprintf(sendmsg, "%4d", len);
+        strcat(sendmsg, msg);
+        cout << sendmsg << endl;
+        bufferevent_write(bev, sendmsg, strlen(sendmsg));
+    }
+    //string strInfo = mapMsg[msgQueue[iIndex]];
+    //bufferevent_write(bev, strInfo.c_str(), strInfo.length());
+    //iIndex = (iIndex + 1) % 7;
 }
 
 void event_cb(struct bufferevent *bev, short event, void *arg)

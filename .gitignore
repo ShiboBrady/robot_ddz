@@ -1,1 +1,4 @@
 *.[oa]
+core
+robot_client
+robot_server

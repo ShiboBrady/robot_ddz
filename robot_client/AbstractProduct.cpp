@@ -1,9 +1,17 @@
 #include "AbstractProduct.h"
 #include "OGLordRobotAI.h"
-#include "PBGameDDZ.pb.h"
 #include "AIUtils.h"
+#include "PBGameDDZ.pb.h"
+#include "connect.pb.h"
+#include "org_room2client.pb.h"
+#include "message.pb.h"
 
 using namespace PBGameDDZ;
+using namespace YLYQ;
+using namespace Protocol;
+using namespace connect;
+using namespace message;
+using namespace org_room2client;
 using namespace AIUtils;
 
 AbstractProduct::AbstractProduct(){
@@ -13,6 +21,164 @@ AbstractProduct::AbstractProduct(){
 AbstractProduct::~AbstractProduct(){
 }
 
+//请求认证回应
+GetVerifyAckInfo::GetVerifyAckInfo(){
+}
+
+
+GetVerifyAckInfo::~GetVerifyAckInfo(){
+}
+
+
+string GetVerifyAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+    //message VerifyAck {
+    //    required int32 result = 1;
+    //    optional string gameName = 2;       // 如果正在游戏中，返回游戏名称，客户端进行初始化，自动快速开始
+    //}
+    string serializedStr;
+    VerifyAck verifyAck;
+    verifyAck.ParseFromString(msg);
+    int result = verifyAck.result();
+    if (message::SUCCESS == result)
+    {
+        //认证成功，开始初始化游戏
+        robot.SetStatus(VERIFIED);
+        cout << "Verify successed, result is: " << result << endl;
+    }
+    else
+    {
+        cout << "Verify failed, result is: " << result << endl;
+    }
+    return serializedStr;
+}
+
+//初始化游戏回应
+GetInitGameAckInfo::GetInitGameAckInfo(){
+}
+
+
+GetInitGameAckInfo::~GetInitGameAckInfo(){
+}
+
+
+string GetInitGameAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+    //message InitGameAck {
+    //    required int32 result = 1;
+    //}
+    string serializedStr;
+    InitGameAck initGameAck;
+    initGameAck.ParseFromString(msg);
+    int result = initGameAck.result();
+    if (message::SUCCESS == result)
+    {
+        //初始化成功，开始查询报名条件
+        robot.SetStatus(INITGAME);
+        cout << "Game Init successed, result is: " << result << endl;
+    }
+    else
+    {
+        cout << "Game Init failed, result is: " << result << endl;
+    }
+    return serializedStr;
+}
+
+//查询报名条件
+GetSignUpCondAckInfo::GetSignUpCondAckInfo(){
+}
+
+GetSignUpCondAckInfo::~GetSignUpCondAckInfo(){
+}
+
+string GetSignUpCondAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+    //message OrgRoomDdzSignUpConditionAck {
+    //    required int32 result = 1;
+    //    message Limit {
+    //        required bool enable = 1;   // 是否满足条件
+    //        optional string desc = 2;   // 条件描述, 大厅配置获取中
+    //    }
+    //    message Cost {
+    //        required int32 id = 1;      // 费用ID
+    //        required string desc = 2;   // 费用描述
+    //        required bool enable = 3;   // 是否满足
+    //        required bool signed = 4;   // 是否已报名
+    //    }
+    //    optional Limit limit = 2;
+    //    repeated Cost costList = 3;
+    //    optional int32 sysTime = 4;     // 系统时间, time_t
+    //    optional int32 startTime = 5;   // 对于定时赛，返回开赛时间, time_t
+    //    optional int32 startSignUpTime = 6; // 开始报名时间, time_t
+    //    optional int32 endSignUpTime = 7;   // 结束报名时间, time_t
+    //}
+    string serializedStr;
+    OrgRoomDdzSignUpConditionAck orgRoomDdzSignUpConditionAck;
+    orgRoomDdzSignUpConditionAck.ParseFromString(msg);
+    int result = orgRoomDdzSignUpConditionAck.result();
+    if (message::SUCCESS != result)
+    {
+        cout << "Sign up condition failed, result is: " << result << endl;
+        return serializedStr;
+    }
+    if (!orgRoomDdzSignUpConditionAck.has_limit())
+    {
+        cout << "Can sign up for free." << endl;
+        robot.SetStatus(CANSINGUP);
+        return serializedStr;
+    }
+    else
+    {
+        bool cond = orgRoomDdzSignUpConditionAck.limit().enable();
+        if (cond)
+        {
+            cout << "Can sign up." << endl;
+            robot.SetStatus(CANSINGUP);
+            return serializedStr;
+        }
+        else
+        {
+            cout << "Cann't sign up." << endl;
+            return serializedStr;
+        }
+    }
+
+}
+
+//报名结果回应
+GetSignUpAckInfo::GetSignUpAckInfo(){
+}
+
+GetSignUpAckInfo::~GetSignUpAckInfo(){
+}
+
+string GetSignUpAckInfo::operation(OGLordRobotAI & robot, const string & msg){
+    //message OrgRoomDdzSignUpAck {
+    //    required int32 result = 1;
+    //    message CostGoods {
+    //        required string name = 1;   // 消耗物品名称 chips-筹码, vipPoints-竞技点
+    //        required int32 count = 2;   // 消耗物品数量
+    //    }
+    //    repeated CostGoods costList = 2;
+    //    optional int32 userCount = 3;   // 已报名人数
+    //}
+    string serializedStr;
+    OrgRoomDdzSignUpAck orgRoomDdzSignUpAck;
+    orgRoomDdzSignUpAck.ParseFromString(msg);
+    int result = orgRoomDdzSignUpAck.result();
+    if (message::SUCCESS == result)
+    {
+        //报名成功，开始等待游戏
+        robot.SetStatus(SIGNUPED);
+        cout << "Sign up succssed, result is: " << result << endl;
+    }
+    else
+    {
+        cout << "Sign up failed, result is: " << result << endl;
+    }
+    return serializedStr;
+}
+
+
+
+/*++++++++++++++++++游戏阶段 开始++++++++++++++++++++++*/
 //游戏开始
 GetGameStartInfo::GetGameStartInfo(){
 }
@@ -395,4 +561,5 @@ string GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& 
     return serializedStr;
 }
 
+/*++++++++++++++++++游戏阶段 结束++++++++++++++++++++++*/
 

@@ -2,8 +2,9 @@
 #define OGLordRobotAI_h__
 
 #pragma once
-#include "OGLordRobotAIInterface.h"
 #include "Robot.h"
+#include "AbstractProduct.h"
+#include "SimpleFactory.h"
 
 #include <vector>
 #include <map>
@@ -91,21 +92,22 @@ public:
 	virtual bool RbtOutGetLastError( int &errorCode);           // 返回当前错误码
 
     //访问数据成员接口
-    virtual void SetRobotId( const int robotId );
+    virtual void SetStatus( RobotStatus status ) { _status = status; };
+    virtual RobotStatus GetStatus() { return _status; };
 
-    virtual int GetRobotId();
+    virtual void SetRobotId( int robotId ) { robotId = robotId; };
+    virtual int GetRobotId() { return robotId; };
 
-    virtual int GetAiSeat();
+    virtual void SetAiSeat( int aiSeat ) { aiSeat = aiSeat; };
+    virtual int GetAiSeat() { return aiSeat; };
 
-    virtual void SetAiSeat(int aiSeat);
+    virtual void SetCurScore( int curScore ) { curScore = curScore; };
+    virtual int GetCurScore() { return curScore; };
 
-    virtual int GetCurScore();
+    virtual void SetLordSeat( int lordSeat ) { lordSeat = lordSeat; };
+    virtual int GetLordSeat() { return lordSeat; };
 
-    virtual void SetCurScore(int curScore);
-
-    virtual int GetLordSeat();
-
-    virtual void SetLordSeat(int lordSeat);
+    std::string RobotProcess( int msgId, std::string msg );
 private:
 
 	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家
@@ -256,6 +258,8 @@ private:
 
 	bool mustHighLevel;
 
+    RobotStatus _status;
+
     int robotId;//机器人id
 
 	int level;//机器人智能等级，目前有0、1
@@ -313,5 +317,9 @@ private:
 	std::vector<std::pair<int, Hand> > history;
 
 	int errCode;
+
+    SimpleFactory factory;
+
+    AbstractProduct* product;
 };
 #endif // OGLordRobotAI_h__

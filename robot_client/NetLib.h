@@ -9,7 +9,7 @@
 #include <vector>
 #include <map>
 #include <list>
-#include "RobotCenter.h"
+#include "OGLordRobotAI.h"
 #include "confaccess.h"
 
 class NetLib
@@ -17,7 +17,8 @@ class NetLib
 public:
     NetLib();
     ~NetLib();
-    void connect();
+    void start();
+    std::string SerializeMsg( int msgId, const std::string& body );
     static void server_msg_cb(struct bufferevent* bev, void* arg);
     static void event_cb(struct bufferevent *bev, short event, void *arg);
     static void cmd_msg_cb(int fd, short events, void* arg);
@@ -25,39 +26,9 @@ public:
     static void init_time_cb(int fd, short events, void* arg);
     static void verify_time_cb(int fd, short events, void* arg);
     static void init_game_time_cb(int fd, short events, void* arg);
+    static void sign_up_cond_time_cb(int fd, short events, void* arg);
     static void sign_up_time_cb(int fd, short events, void* arg);
-    void start();
-
 private:
-    typedef struct MsgNode
-    {
-        MsgNode(NetLib* netlib = NULL, int index = 0):netlib(netlib), index(index){}
-        NetLib* netlib;
-        int index;
-    }msgNode, *pMsgNode;
-
-    typedef struct BevNode
-    {
-        BevNode(NetLib* netlib = NULL, 
-                std::vector<struct bufferevent*>* bev = NULL, 
-                std::map<RobotCenter*, int>* unInitList = NULL,
-                std::map<RobotCenter*, int>* unVerifyList = NULL, 
-                std::map<RobotCenter*, int>* unInitGameList = NULL,
-                std::map<RobotCenter*, int>* unSignUpList = NULL)
-            :netlib(netlib),
-             bev(bev),
-             unInitList(unInitList),
-             unInitGameList(unInitGameList),
-             unVerifyList(unVerifyList),
-             unSignUpList(unSignUpList){}
-        NetLib* netlib;
-        std::vector<struct bufferevent*>* bev;
-        std::map<RobotCenter*, int>* unInitList;
-        std::map<RobotCenter*, int>* unInitGameList;
-        std::map<RobotCenter*, int>* unVerifyList;
-        std::map<RobotCenter*, int>* unSignUpList;        
-    }bevNode, *pBevNode;
-
     std::string ip_;
     int port_;
     int robotNum_;
@@ -68,11 +39,12 @@ private:
     int initTime_;
     int verifyTime_;
     int initGameTime_;
+    int signUpCondTime_;
     int signUpTime_;
 
     //libevent基础数据结构
     struct event_base* base;
-    std::vector<struct bufferevent*> bev;
+    std::map<struct bufferevent*, OGLordRobotAI> bevToRobot;
     struct sockaddr_in server_addr;
 
     //心跳的定时器
@@ -91,26 +63,17 @@ private:
     struct event ev_timer_init_game;
     struct timeval timerEventInitGame;
 
+    //查询报名条件的定时器
+    struct event ev_timer_sign_in_cond;
+    struct timeval timerEventSignInCond;
+
     //报名的定时器
     struct event ev_timer_sign_in;
     struct timeval timerEventSignIn;
 
-    //网络连接序列号与机器人的对应关系
-    std::map<int, RobotCenter> robotCenter;
-
-    //队列：未进行任何操作的机器人列表
-    std::map<RobotCenter*, int> unInitList;
-
-    //队列：未验证通过的机器人队列
-    std::map<RobotCenter*, int> unVerifyList;
-
-    //队列：未初始化游戏的机器人列表
-    std::map<RobotCenter*, int> unInitGameList;
-
-    //队列：未报名成功的机器人队列
-    std::map<RobotCenter*, int> unSignUpList;    
-
+    void connect();
     bool Init();
+    void InitTimer();
 };
 
 #endif /*_NETLIB_H_*/

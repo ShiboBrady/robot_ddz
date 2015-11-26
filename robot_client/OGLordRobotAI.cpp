@@ -5,22 +5,41 @@ using namespace std;
 using namespace AIUtils;
 
 OGLordRobotAI::OGLordRobotAI( const int robotId, const int IQLevel )
-    :robotId(robotId),
+    :mustHighLevel(false),
+     _status(INIT),
+     robotId(robotId),
      level(IQLevel),
      lordSeat(-1),     //地主位置
      aiSeat(-1),       //自己的位置
      curHandSeat(-1),  //当前出牌位置
      curCaller(-1),     //当前叫分的人
-     curScore(0)       //当前的叫分
+     curScore(0),       //当前的叫分
+     factory(),
+     product(NULL)
 
 {
     curHand.type = NOTHING;
 }
 
-
 OGLordRobotAI::~OGLordRobotAI(void)
 {
 }
+
+string OGLordRobotAI::RobotProcess(int msgId, string msg)
+{
+    string result;
+
+    //处理消息
+    product = factory.createProduct(msgId);
+    if (NULL == product)
+    {
+        cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
+        return result;
+    }
+    result = product->operation(*this, msg);
+    return result;
+}
+
 
 bool OGLordRobotAI::RbtInInitCard(int argSeat, std::vector<int> argHandCard)
 {
@@ -322,46 +341,6 @@ bool OGLordRobotAI::RbtResetData()
 	callHistory.clear();
 	history.clear();
 	return true;
-}
-
-void OGLordRobotAI::SetRobotId( const int robotId )
-{
-    this->robotId= robotId;
-}
-
-int OGLordRobotAI::GetRobotId()
-{
-    return robotId;
-}
-
-int OGLordRobotAI::GetAiSeat()
-{
-    return aiSeat;
-}
-
-void OGLordRobotAI::SetAiSeat(int aiSeat)
-{
-    this->aiSeat = aiSeat;
-}
-
-int OGLordRobotAI::GetCurScore()
-{
-    return curScore;
-}
-
-void OGLordRobotAI::SetCurScore(int curScore)
-{
-    this->curScore = curScore;
-}
-
-int OGLordRobotAI::GetLordSeat()
-{
-    return lordSeat;
-}
-
-void OGLordRobotAI::SetLordSeat(int lordSeat)
-{
-    this->lordSeat = lordSeat;
 }
 
 bool OGLordRobotAI::RbtInSetSeat( int argMySeat, int argLordSeat)

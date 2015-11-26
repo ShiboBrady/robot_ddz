@@ -1,22 +1,5 @@
 #include "SimpleFactory.h"
 
-
-AbstractFactory::AbstractFactory(){
-}
-
-
-AbstractFactory::~AbstractFactory(){
-}
-
-
-SimpleFactory::SimpleFactory(){
-}
-
-
-SimpleFactory::~SimpleFactory(){
-}
-
-
 AbstractProduct* SimpleFactory::createProduct(int type){
     AbstractProduct* temp = NULL;
     switch(type)
@@ -47,6 +30,18 @@ AbstractProduct* SimpleFactory::createProduct(int type){
             break;
         case MSGID_TAKEOUT_ACK:
             temp = new GetTakeOutCardResultInfo();
+            break;
+        case MSGID_VERIFY_ACK:
+            temp = new GetVerifyAckInfo();
+            break;
+        case MSGID_INIT_GAME_ACK:
+            temp = new GetInitGameAckInfo();
+            break;
+        case MSGID_DDZ_SIGN_UP_CONDITION_ACK:
+            temp = new GetSignUpCondAckInfo();
+            break;
+        case MSGID_DDZ_SIGN_UP_ACK:
+            temp = new GetSignUpAckInfo();
             break;
         default:
             break;
