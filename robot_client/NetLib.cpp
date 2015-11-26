@@ -11,6 +11,7 @@
 #include "message.pb.h"
 #include "connect.pb.h"
 #include "org_room2client.pb.h"
+#include "stringutil.h"
 
 using namespace std;
 using namespace YLYQ;
@@ -80,15 +81,15 @@ string NetLib::SerializeMsg( int msgId, const string& body )
 {
     Message message;
     message.set_body( body.c_str() );
-    message.head().set_version(1);
-    message.head().set_sequence(1);
-    message.head().set_timestamp(1);
+    message.mutable_head()->set_version(1);
+    message.mutable_head()->set_sequence(1);
+    message.mutable_head()->set_timestamp(1);
     string serializedStr;
     message.SerializeToString(&serializedStr);
-    char 4ByteMsgLen[4], 4ByteMsgId[4];
-    sprintf(4ByteMsgLen, "%4d", serializedStr.length());
-    sprintf(4ByteMsgId, "%4d", msgId);
-    return str(4ByteMsgLen) + 4ByteMsgId + serializedStr;
+    char fourByteMsgLen[4], fourMsgId[4];
+    sprintf(fourByteMsgLen, "%4d", int(serializedStr.length()));
+    sprintf(fourMsgId, "%4d", msgId);
+    return string(fourByteMsgLen) + fourMsgId + serializedStr;
 }
 
 void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
@@ -170,7 +171,7 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
         {
             if (MSGID_CALLSCORE_REQ == msgId || MSGID_TAKEOUT_REQ == msgId)
             {
-                strRet = SerializeMsg(msgId, strRet);
+                strRet = netlib->SerializeMsg(msgId, strRet);
                 //把消息发送给服务器端
                 bufferevent_write(bev, strRet.c_str(), strRet.length());
                 cout << "Send " << strRet << " to server." << endl;
@@ -190,7 +191,7 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
     heartbeatNtf.set_rev("robot");
     string serializedStr;
     heartbeatNtf.SerializeToString(&serializedStr);
-    serializedStr = SerializeMsg(msgId, serializedStr);
+    serializedStr = netlib->SerializeMsg(connect::MSGID_HEARTBEAT_NTF, serializedStr);
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
@@ -200,38 +201,24 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
     event_add(&(netlib->ev_timer_heart_beat), &(netlib->timerEventHeartBeat));/*重新添加定时器*/
 }
 
-void NetLib::init_time_cb(int fd, short events, void* arg)
+void NetLib::verify_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    char msg[] = "init robot\n";
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
-
-    Verify verify;
+    VerifyReq verifyReq ;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
         if (INIT == (it->second).GetStatus())
         {
-            verify.Clear();
-            verify.set_userid((it->second).GetRobotId());
-            verify.set_sessionKey(str("session~") + str((it->second).GetRobotId()));
+            string robotId = StringUtil::Int2String((it->second).GetRobotId());
+            verifyReq.Clear();
+            verifyReq.set_userid(robotId);
+            verifyReq.set_sessionkey(string("session~") + robotId);
             string serializedStr;
-            verify.SerializeToString(&serializedStr);
-            serializedStr = SerializeMsg(MSGID_VERIFY_REQ, serializedStr);
+            verifyReq.SerializeToString(&serializedStr);
+            serializedStr = netlib->SerializeMsg(connect::MSGID_VERIFY_REQ, serializedStr);
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
         }
-    }
-    cout << "send init robot successed." << endl;
-    event_add(&(netlib->ev_timer_init), &(netlib->timerEventInit));/*重新添加定时器*/
-}
-
-void NetLib::verify_time_cb(int fd, short events, void* arg)
-{
-    NetLib* netlib = static_cast<NetLib*>(arg);
-    char msg[] = "verify\n";
-    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
-    for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
-    {
-        bufferevent_write(it->first, msg, strlen(msg));
     }
     cout << "send verify successed, pthread Id: " << (unsigned)pthread_self() << endl;
     event_add(&(netlib->ev_timer_verify), &(netlib->timerEventVerify));/*重新添加定时器*/
@@ -375,10 +362,6 @@ void NetLib::InitTimer()
     timerEventHeartBeat.tv_sec = heartBeatTime_;
     timerEventHeartBeat.tv_usec = 0;
 
-    //机器人初始化的定时器初始化
-    timerEventInit.tv_sec = initTime_;
-    timerEventInit.tv_usec = 0;
-
     //验证身份的定时器初始化
     timerEventVerify.tv_sec = verifyTime_;
     timerEventVerify.tv_usec = 0;
@@ -399,11 +382,6 @@ void NetLib::InitTimer()
     evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, this);
     event_add(&ev_timer_heart_beat, &timerEventHeartBeat);
     cout << "Heart beat timer started!" << endl;
-
-    //添加机器人初始化定时器
-    evtimer_set(&ev_timer_init, init_time_cb, this);
-    event_add(&ev_timer_init, &timerEventInit);
-    cout << "Robot init timer started!" << endl;
 
     //添加验证身份定时器
     evtimer_set(&ev_timer_verify, verify_time_cb, this);
