@@ -204,6 +204,10 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
 void NetLib::verify_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
+
+    string strSessionKey;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    bool bResult = confAccess->GetValue("sessionKey", "sessionKey", strSessionKey, "session~");
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     VerifyReq verifyReq ;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
@@ -213,7 +217,7 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
             string robotId = StringUtil::Int2String((it->second).GetRobotId());
             verifyReq.Clear();
             verifyReq.set_userid(robotId);
-            verifyReq.set_sessionkey(string("session~") + robotId);
+            verifyReq.set_sessionkey(strSessionKey + robotId);
             string serializedStr;
             verifyReq.SerializeToString(&serializedStr);
             serializedStr = netlib->SerializeMsg(connect::MSGID_VERIFY_REQ, serializedStr);
@@ -227,11 +231,25 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
 void NetLib::init_game_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    char msg[] = "game init\n";
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    string strType;
+    string strName;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    bool bResult = confAccess->GetValue("game", "type", strType, "ddz");
+    bResult = confAccess->GetValue("game", "name", strName, "org_ddz_match");
+    InitGameReq initGameReq;
+    initGameReq.set_type(strType.c_str());
+    initGameReq.set_name(strName.c_str());
+    string serializedStr;
+    initGameReq.SerializeToString(&serializedStr);
+    serializedStr = netlib->SerializeMsg(connect::MSGID_INIT_GAME_REQ, serializedStr);
+
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
-        bufferevent_write(it->first, msg, strlen(msg));
+        if (VERIFIED == (it->second).GetStatus())
+        {
+            bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+        }
     }
     cout << "send init game successed, pthread Id: " << (unsigned)pthread_self() << endl;
     event_add(&(netlib->ev_timer_init_game), &(netlib->timerEventInitGame));/*重新添加定时器*/
@@ -240,31 +258,41 @@ void NetLib::init_game_time_cb(int fd, short events, void* arg)
 void NetLib::sign_up_cond_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
+    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    OrgRoomDdzSignUpConditionReq orgRoomDdzSignUpConditionReq;
+    orgRoomDdzSignUpConditionReq.set_matchid(1);
+    string serializedStr;
+    orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
+    serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr);
 
+    for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
+    {
+        if (INITGAME == (it->second).GetStatus())
+        {
+            bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+        }
+    }
     event_add(&(netlib->ev_timer_sign_in_cond), &(netlib->timerEventSignInCond));/*重新添加定时器*/
 }
 
 void NetLib::sign_up_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    //vector<struct bufferevent*>* allBev = aBevNode->bev;
-    //std::map<OGLordRobotAI*, int>* allUnSignUpRobot = aBevNode->unSignUpList;
-
-    ////遍历未报名机器人队表
-    //for (map<OGLordRobotAI*, int>::iterator it = allUnSignUpRobot->begin(); it != allUnSignUpRobot->end(); ++it)
-    //{
-    //    RobotCenter* robotCenter = it->first;
-    //    int index = it->second;
-    //    struct bufferevent* bev = (*allBev)[index];
-    //}
-
-    //查询进场条件
-
-    char msg[] = "sign up\n";
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
+    orgRoomDdzSignUpReq.set_matchid(1);
+    orgRoomDdzSignUpReq.set_costid(1);
+
+    string serializedStr;
+    orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
+    serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_REQ, serializedStr);
+
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
-        bufferevent_write(it->first, msg, strlen(msg));
+        if (CANSINGUP == (it->second).GetStatus())
+        {
+            bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+        }
     }
     cout << "send sign up req successed, pthread Id: " << (unsigned)pthread_self() << endl;
     event_add(&(netlib->ev_timer_sign_in), &(netlib->timerEventSignIn));/*重新添加定时器*/
