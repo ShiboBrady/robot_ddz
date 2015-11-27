@@ -32,7 +32,8 @@ NetLib::NetLib()
     server_addr.sin_port = htons(port_);
     inet_aton(ip_.c_str(), &server_addr.sin_addr);
     base = event_init();
-    cout << ip_ << " " << port_ << endl;
+    cout << "ip: " << ip_.c_str() << endl;
+    cout << "port: " << port_ << endl;
 
     connect();
 
@@ -60,7 +61,7 @@ void NetLib::connect()
             }
             bufferevent_socket_connect(insertResult.first->first, (struct sockaddr *)&server_addr, sizeof(server_addr));
             bufferevent_setcb(insertResult.first->first, server_msg_cb, NULL, event_cb, this);
-            bufferevent_enable(insertResult.first->first, EV_READ | EV_WRITE);
+            bufferevent_enable(insertResult.first->first, EV_READ | EV_PERSIST);
             cout << "Create a connection, index is: " << index << ", init a Robot, Id is: " << robotIdStart_ + index << endl;
         }
         else
@@ -81,15 +82,24 @@ string NetLib::SerializeMsg( int msgId, const string& body )
 {
     Message message;
     message.set_body( body.c_str() );
-    message.mutable_head()->set_version(1);
-    message.mutable_head()->set_sequence(1);
-    message.mutable_head()->set_timestamp(1);
+    message.mutable_head()->set_version(1);     //暂且设为1
+    message.mutable_head()->set_sequence(1);    //暂且设为1
+    message.mutable_head()->set_timestamp(1);   //暂且设为1
     string serializedStr;
     message.SerializeToString(&serializedStr);
-    char fourByteMsgLen[4], fourMsgId[4];
-    sprintf(fourByteMsgLen, "%4d", int(serializedStr.length()));
-    sprintf(fourMsgId, "%4d", msgId);
-    return string(fourByteMsgLen) + fourMsgId + serializedStr;
+
+    int msgLen = int(serializedStr.length());
+
+    cout << "Before trans to net byte order: msg length: " << msgLen << endl;
+    cout << "msgId: " << msgId << endl;
+    msgLen = htonl(msgLen);
+    msgId = htonl(msgId);
+
+    string strRet;
+    strRet.append((char*)&msgLen, sizeof(msgLen));
+    strRet.append((char*)&msgId, sizeof(msgId));
+    strRet.append(serializedStr.c_str(), (int)serializedStr.length());
+    return strRet;
 }
 
 void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
@@ -115,7 +125,7 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
         return;
     }
 
-    char msgLen[5] = {0};
+    char msgLen[4] = {0};
     size_t len = 0;
     int iMsgLen = 0;
     int msgId = 0;
@@ -123,61 +133,64 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
     cout << "Reveive data length is: " << dataLength << endl;
     while (dataLength > 0)
     {
-        //读取消息长度
-        memset(msgLen, '\0', 5);
+        //读取msg length
+        memset(msgLen, '\0', 4);
         len = bufferevent_read(bev, msgLen, 4);
         if (4 != len)
         {
             cout << "Doesn't has 4 byte len info." << endl;
             break;
         }
-
-        msgLen[len] = '\0';
-        iMsgLen = ::atoi(msgLen);
+        int *pMsgLen = (int*)msgLen;
+        iMsgLen = ntohl(*pMsgLen);
         if (0 == iMsgLen)
         {
             cout << "Error! Convent data length failed." << endl;
             break;
         }
-        cout << "Msg len: " << msgLen << endl;
+        cout << "Msg len: " << iMsgLen << endl;
 
         //读取msgid
-        memset(msgLen, '\0', 5);
+        memset(msgLen, '\0', 4);
         len = bufferevent_read(bev, msgLen, 4);
         if (4 != len)
         {
             cout << "Doesn't has 4 byte MsgId info." << endl;
             break;
         }
-
-        msgLen[len] = '\0';
-        msgId = ::atoi(msgLen);
-        if (0 == msgId)
-        {
-            cout << "Error! Convent msgId failed." << endl;
-            break;
-        }
+        pMsgLen = (int*)msgLen;
+        msgId = ntohl(*pMsgLen);
         cout << "MsgId is: " << msgId << endl;
 
         //读取消息体
         char* msg = new char[iMsgLen + 1];
         len = bufferevent_read(bev, msg, iMsgLen);
-        msg[len] = '\0';
-        cout << "Receive " << msg << " from server" << endl;
+        cout << "Receive " << len << " byte from server for robot :" << (it->second).GetRobotId() << endl;
 
-        string strRet = (it->second).RobotProcess(msgId, msg);
+        string strMsg;
+        strMsg.append(msg, iMsgLen);
+        delete [] msg;
+        string strRet = (it->second).RobotProcess(msgId, strMsg);
 
         if (0 != strRet.length())
         {
-            if (MSGID_CALLSCORE_REQ == msgId || MSGID_TAKEOUT_REQ == msgId)
+            if (NOTIFY_CALLSCORE == msgId || NOTIFY_TAKEOUT == msgId ||\
+                NOTIFY_DEALCARD == msgId || NOTIFY_BASECARD == msgId)
             {
-                strRet = netlib->SerializeMsg(msgId, strRet);
+                if (NOTIFY_CALLSCORE == msgId || NOTIFY_DEALCARD == msgId)
+                {
+                    msgId = MSGID_CALLSCORE_REQ;
+                }
+                else if (NOTIFY_TAKEOUT == msgId || NOTIFY_BASECARD == msgId)
+                {
+                    msgId = MSGID_TAKEOUT_REQ;
+                }
+                string strSend = netlib->SerializeMsg(msgId, strRet);
                 //把消息发送给服务器端
-                bufferevent_write(bev, strRet.c_str(), strRet.length());
-                cout << "Send " << strRet << " to server." << endl;
+                bufferevent_write(bev, strSend.c_str(), strSend.length());
+                cout << "Send " << strSend << " to server." << endl;
             }
         }
-        delete [] msg;
         dataLength = evbuffer_get_length(bufferevent_get_input(bev));
         cout << "Data still has length: " << dataLength << endl;
     }
@@ -187,11 +200,13 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
 void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
+
     HeartbeatNtf heartbeatNtf;
-    heartbeatNtf.set_rev("robot");
+    heartbeatNtf.set_rev("robot");  //暂且设为robot
     string serializedStr;
     heartbeatNtf.SerializeToString(&serializedStr);
     serializedStr = netlib->SerializeMsg(connect::MSGID_HEARTBEAT_NTF, serializedStr);
+
     std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
@@ -207,9 +222,11 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
 
     string strSessionKey;
     CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    bool bResult = confAccess->GetValue("sessionKey", "sessionKey", strSessionKey, "session~");
-    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    bool bResult = confAccess->GetValue("sessionKey", "sessionKey", strSessionKey, "session_");
+
+    bool bHasUnviryfiedRobot = false;
     VerifyReq verifyReq ;
+    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
         if (INIT == (it->second).GetStatus())
@@ -217,134 +234,145 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
             string robotId = StringUtil::Int2String((it->second).GetRobotId());
             verifyReq.Clear();
             verifyReq.set_userid(robotId);
-            verifyReq.set_sessionkey(strSessionKey + robotId);
+            verifyReq.set_sessionkey(StringUtil::Trim(strSessionKey) + robotId);
             string serializedStr;
             verifyReq.SerializeToString(&serializedStr);
             serializedStr = netlib->SerializeMsg(connect::MSGID_VERIFY_REQ, serializedStr);
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+            cout << "Robot " << (it->second).GetRobotId() << " send verify successed." << endl;
+            bHasUnviryfiedRobot = true;
         }
     }
-    cout << "send verify successed, pthread Id: " << (unsigned)pthread_self() << endl;
-    event_add(&(netlib->ev_timer_verify), &(netlib->timerEventVerify));/*重新添加定时器*/
+    if (bHasUnviryfiedRobot)
+    {
+        event_add(&(netlib->ev_timer_verify), &(netlib->timerEventVerify));/*重新添加定时器*/
+    }
 }
 
 void NetLib::init_game_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+
     string strType;
     string strName;
     CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    bool bResult = confAccess->GetValue("game", "type", strType, "ddz");
-    bResult = confAccess->GetValue("game", "name", strName, "org_ddz_match");
+    confAccess->GetValue("game", "type", strType, "ddz");
+    confAccess->GetValue("game", "name", strName, "org_ddz_match");
+
     InitGameReq initGameReq;
-    initGameReq.set_type(strType.c_str());
-    initGameReq.set_name(strName.c_str());
+    initGameReq.set_type(StringUtil::Trim(strType).c_str());
+    initGameReq.set_name(StringUtil::Trim(strName).c_str());
     string serializedStr;
     initGameReq.SerializeToString(&serializedStr);
     serializedStr = netlib->SerializeMsg(connect::MSGID_INIT_GAME_REQ, serializedStr);
 
+    bool bHasUnInitedRobot = false;
+    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
         if (VERIFIED == (it->second).GetStatus())
         {
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+            cout << "Robot " << (it->second).GetRobotId() << " send init game successed." << endl;
+            bHasUnInitedRobot = true;
         }
     }
-    cout << "send init game successed, pthread Id: " << (unsigned)pthread_self() << endl;
-    event_add(&(netlib->ev_timer_init_game), &(netlib->timerEventInitGame));/*重新添加定时器*/
+    if (bHasUnInitedRobot)
+    {
+        event_add(&(netlib->ev_timer_init_game), &(netlib->timerEventInitGame));/*重新添加定时器*/
+    }
 }
 
 void NetLib::sign_up_cond_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    string strMatchId;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    confAccess->GetValue("game", "matchid", strMatchId, "1000");
+
     OrgRoomDdzSignUpConditionReq orgRoomDdzSignUpConditionReq;
-    orgRoomDdzSignUpConditionReq.set_matchid(1);
+    orgRoomDdzSignUpConditionReq.set_matchid(::atoi(strMatchId.c_str()));
     string serializedStr;
     orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
     serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr);
 
+    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
         if (INITGAME == (it->second).GetStatus())
         {
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+            cout << "Robot " << (it->second).GetRobotId() << " send sign up cond req successed" << endl;
         }
     }
+
     event_add(&(netlib->ev_timer_sign_in_cond), &(netlib->timerEventSignInCond));/*重新添加定时器*/
 }
 
 void NetLib::sign_up_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
+    string strMatchId;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    confAccess->GetValue("game", "matchid", strMatchId, "1000");
+
     OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
-    orgRoomDdzSignUpReq.set_matchid(1);
-    orgRoomDdzSignUpReq.set_costid(1);
+    orgRoomDdzSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
 
-    string serializedStr;
-    orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
-    serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_REQ, serializedStr);
-
+    std::map<struct bufferevent*, OGLordRobotAI>::iterator it;
     for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
     {
         if (CANSINGUP == (it->second).GetStatus())
         {
+            orgRoomDdzSignUpReq.set_costid((it->second).GetCost());
+            string serializedStr;
+            orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
+            serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_REQ, serializedStr);
+
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
+            cout << "Robot " << (it->second).GetRobotId() << " send sign up req successed" << endl;
         }
     }
-    cout << "send sign up req successed, pthread Id: " << (unsigned)pthread_self() << endl;
+
     event_add(&(netlib->ev_timer_sign_in), &(netlib->timerEventSignIn));/*重新添加定时器*/
 }
 
 void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
 {
-
+    NetLib* netlib = static_cast<NetLib*>(arg);
     if (event & BEV_EVENT_EOF)
-        printf("connection closed\n");
+    {
+        cout << "connection closed." << endl;
+    }
     else if (event & BEV_EVENT_ERROR)
+    {
         printf("some other error\n");
+    }
     else if( event & BEV_EVENT_CONNECTED)
     {
         printf("the client has connected to server\n");
         return ;
     }
 
-    //这将自动close套接字和free读写缓冲区
-    bufferevent_free(bev);
-
-    struct event *ev = (struct event*)arg;
-    event_free(ev);
-}
-
-void NetLib::cmd_msg_cb(int fd, short events, void* arg)
-{
-    char msg[1024];
-
-    int ret = read(fd, msg, sizeof(msg));
-    if( ret < 0 )
+    //查找消息对应的机器人
+    map<struct bufferevent*, OGLordRobotAI>::iterator it = (netlib->bevToRobot).find(bev);
+    if ((netlib->bevToRobot).end() != it)
     {
-        perror("read fail ");
-        exit(1);
+        //这将自动close套接字和free读写缓冲区
+        bufferevent_free(bev);
+        cout << "Robot " << (it->second).GetRobotId() << " disconnected." << endl;
+        (netlib->bevToRobot).erase(it);
     }
-
-    struct bufferevent* bev = (struct bufferevent*)arg;
-
-    //把终端的消息发送给服务器端
-    bufferevent_write(bev, msg, ret);
 }
 
 bool NetLib::Init()
 {
-    std::string strIp;
     std::string strPort;
     std::string strRobotNum;
     std::string strRobotIQLevel;
     std::string strRobotIdStart;
     std::string strRobotIdEnd;
     std::string strHeartBeatTime;
-    std::string strInitTime;
     std::string strVerifyTime;
     std::string strInitGameTime;
     std::string strSignUpCondTime;
@@ -356,24 +384,21 @@ bool NetLib::Init()
     bResult = confAccess->GetValue("robot", "robotIdEnd", strRobotIdEnd, "110001");
     bResult = confAccess->GetValue("robot", "robotNum", strRobotNum, "1");
     bResult = confAccess->GetValue("robot", "IQLevel", strRobotIQLevel, "0");
-    bResult = confAccess->GetValue("server", "ip", strIp, "127.0.0.1");
-    bResult = confAccess->GetValue("server", "port", strPort, "9999");
+    bResult = confAccess->GetValue("server", "ip", ip_, "127.0.0.1");
     bResult = confAccess->GetValue("timer", "heartBeat", strHeartBeatTime, "30");
-    bResult = confAccess->GetValue("timer", "init", strInitTime, "30");
     bResult = confAccess->GetValue("timer", "verify", strVerifyTime, "30");
     bResult = confAccess->GetValue("timer", "initGame", strInitGameTime, "30");
     bResult = confAccess->GetValue("timer", "signUpCond", strSignUpCondTime, "30");
     bResult = confAccess->GetValue("timer", "signUp", strSignUpTime, "30");
+    bResult = confAccess->GetValue("server", "port", strPort, "9999");
     if (bResult)
     {
-        ip_ = strIp;
         port_ = ::atoi(strPort.c_str());
         robotNum_ = ::atoi(strRobotNum.c_str());
         robotIQLevel_ = ::atoi(strRobotIQLevel.c_str());
         robotIdStart_ = ::atoi(strRobotIdStart.c_str());
         robotIdEnd_ = ::atoi(strRobotIdEnd.c_str());
         heartBeatTime_ = ::atoi(strHeartBeatTime.c_str());
-        initTime_ = ::atoi(strInitTime.c_str());
         verifyTime_ = ::atoi(strVerifyTime.c_str());
         initGameTime_ = ::atoi(strInitGameTime.c_str());
         signUpCondTime_ = ::atoi(strSignUpCondTime.c_str());
@@ -424,7 +449,7 @@ void NetLib::InitTimer()
     //添加查询报名条件定时器
     evtimer_set(&ev_timer_sign_in_cond, sign_up_cond_time_cb, this);
     event_add(&ev_timer_sign_in_cond, &timerEventSignInCond);
-    cout << "Sign up timer started!" << endl;
+    cout << "Sign up cond timer started!" << endl;
 
     //添加报名定时器
     evtimer_set(&ev_timer_sign_in, sign_up_time_cb, this);

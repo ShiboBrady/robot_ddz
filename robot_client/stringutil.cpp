@@ -3,9 +3,9 @@
 
 namespace StringUtil
 {
-    std::string Trim(const std::string& s) 
+    std::string Trim(const std::string& s)
     {
-        static const char* whiteSpace = " \t\n";
+        static const char* whiteSpace = " \t\n\r";
 
         // test for null string
         if(s.empty())

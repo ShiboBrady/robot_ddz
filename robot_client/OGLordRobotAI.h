@@ -95,19 +95,22 @@ public:
     virtual void SetStatus( RobotStatus status ) { _status = status; };
     virtual RobotStatus GetStatus() { return _status; };
 
-    virtual void SetRobotId( int robotId ) { robotId = robotId; };
+    virtual void SetCost( int costId ) { _costId = costId; };
+    virtual int GetCost() { return _costId; };
+
+    virtual void SetRobotId( int robotId ) { this->robotId = robotId; };
     virtual int GetRobotId() { return robotId; };
 
-    virtual void SetAiSeat( int aiSeat ) { aiSeat = aiSeat; };
+    virtual void SetAiSeat( int aiSeat ) { this->aiSeat = aiSeat; };
     virtual int GetAiSeat() { return aiSeat; };
 
-    virtual void SetCurScore( int curScore ) { curScore = curScore; };
+    virtual void SetCurScore( int curScore ) { this->curScore = curScore; };
     virtual int GetCurScore() { return curScore; };
 
-    virtual void SetLordSeat( int lordSeat ) { lordSeat = lordSeat; };
+    virtual void SetLordSeat( int lordSeat ) { this->lordSeat = lordSeat; };
     virtual int GetLordSeat() { return lordSeat; };
 
-    std::string RobotProcess( int msgId, std::string msg );
+    std::string RobotProcess( int msgId, const std::string& msg );
 private:
 
 	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家
@@ -259,6 +262,8 @@ private:
 	bool mustHighLevel;
 
     RobotStatus _status;
+
+    int _costId;//报名比赛时的费用ID
 
     int robotId;//机器人id
 

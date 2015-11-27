@@ -1,5 +1,7 @@
 #include "OGLordRobotAI.h"
 #include "AIUtils.h"
+#include "message.pb.h"
+
 
 using namespace std;
 using namespace AIUtils;
@@ -7,6 +9,7 @@ using namespace AIUtils;
 OGLordRobotAI::OGLordRobotAI( const int robotId, const int IQLevel )
     :mustHighLevel(false),
      _status(INIT),
+     _costId(0),
      robotId(robotId),
      level(IQLevel),
      lordSeat(-1),     //地主位置
@@ -25,7 +28,7 @@ OGLordRobotAI::~OGLordRobotAI(void)
 {
 }
 
-string OGLordRobotAI::RobotProcess(int msgId, string msg)
+string OGLordRobotAI::RobotProcess(int msgId, const string& msg)
 {
     string result;
 
@@ -36,7 +39,19 @@ string OGLordRobotAI::RobotProcess(int msgId, string msg)
         cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
         return result;
     }
-    result = product->operation(*this, msg);
+    YLYQ::Protocol::message::Message message;
+    if (!message.ParseFromString(msg))
+    {
+        cout << "Parse message pb error." << endl;
+        return result;
+    }
+    if (!message.has_body())
+    {
+        cout << "Doesn't has body info." << endl;
+        return result;
+    }
+    string bodyMsg = message.body();
+    result = product->operation(*this, bodyMsg);
     return result;
 }
 
@@ -154,7 +169,7 @@ bool OGLordRobotAI::RbtOutGetCallScore(int &callScore)
 			isCallLord = true;
 		}
 	}
-	callScore = isCallLord ? 3 : 0;
+	callScore = isCallLord ? 2 : 0;
 	return true;
 }
 
