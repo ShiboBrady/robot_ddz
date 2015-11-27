@@ -111,6 +111,8 @@ public:
     virtual int GetLordSeat() { return lordSeat; };
 
     std::string RobotProcess( int msgId, const std::string& msg );
+
+    void RecoveryHandCards();
 private:
 
 	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家
@@ -263,6 +265,8 @@ private:
 
     RobotStatus _status;
 
+    std::vector<int> vecLastTakeOutCards;//最后一次出牌纪录
+
     int _costId;//报名比赛时的费用ID
 
     int robotId;//机器人id
@@ -281,7 +285,7 @@ private:
 
 	std::vector<int> leftoverCards;
 
-	std::vector<int> aiCardsVec;//自己手中的牌，以54位的vector保存
+	std::vector<int> aiCardsVec;//自己手中的牌，以17位的vector保存
 
 	CardsInfo playerInfo[PLAYER_NUM];//玩家的手牌信息，以结构体的形式保存
 

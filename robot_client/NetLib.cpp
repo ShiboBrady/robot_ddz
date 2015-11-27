@@ -90,8 +90,8 @@ string NetLib::SerializeMsg( int msgId, const string& body )
 
     int msgLen = int(serializedStr.length());
 
-    cout << "Before trans to net byte order: msg length: " << msgLen << endl;
-    cout << "msgId: " << msgId << endl;
+    //cout << "Before trans to net byte order: msg length: " << msgLen << endl;
+    //cout << "msgId: " << msgId << endl;
     msgLen = htonl(msgLen);
     msgId = htonl(msgId);
 
@@ -165,7 +165,8 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
         //读取消息体
         char* msg = new char[iMsgLen + 1];
         len = bufferevent_read(bev, msg, iMsgLen);
-        cout << "Receive " << len << " byte from server for robot :" << (it->second).GetRobotId() << endl;
+        cout << "Receive " << len << " byte from server for robot :" << (it->second).GetRobotId()
+            << " in message " << msgId << endl;
 
         string strMsg;
         strMsg.append(msg, iMsgLen);
@@ -188,7 +189,8 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
                 string strSend = netlib->SerializeMsg(msgId, strRet);
                 //把消息发送给服务器端
                 bufferevent_write(bev, strSend.c_str(), strSend.length());
-                cout << "Send " << strSend << " to server." << endl;
+                cout << "Send message: " << msgId << " to server for robot :"
+                    << (it->second).GetRobotId() << endl;
             }
         }
         dataLength = evbuffer_get_length(bufferevent_get_input(bev));
@@ -305,7 +307,6 @@ void NetLib::sign_up_cond_time_cb(int fd, short events, void* arg)
             cout << "Robot " << (it->second).GetRobotId() << " send sign up cond req successed" << endl;
         }
     }
-
     event_add(&(netlib->ev_timer_sign_in_cond), &(netlib->timerEventSignInCond));/*重新添加定时器*/
 }
 
@@ -333,7 +334,6 @@ void NetLib::sign_up_time_cb(int fd, short events, void* arg)
             cout << "Robot " << (it->second).GetRobotId() << " send sign up req successed" << endl;
         }
     }
-
     event_add(&(netlib->ev_timer_sign_in), &(netlib->timerEventSignIn));/*重新添加定时器*/
 }
 

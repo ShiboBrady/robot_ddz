@@ -391,7 +391,7 @@ string GetLordInfo::operation( OGLordRobotAI& robot, const string& msg ){
     }
     int seatLord = lordSetNtf.seatlord();
     robot.SetLordSeat(seatLord);
-    cout << "Set lord info successed, " << seatLord << endl;
+    cout << "Set lord info over, " << seatLord << endl;
     return serializedStr;
 }
 
@@ -426,12 +426,12 @@ string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     cout << "Base card info:" << endl;
     printCardInfo(vecBaseCard);
     robot.RbtInSetLord(seatLord, vecBaseCard);
-    cout << "Set base card successed." << endl;
+    cout << "Set base card over." << endl;
 
     //判断自己是不是地主
     if (robot.GetLordSeat() == robot.GetAiSeat())
     {
-        cout << "I am lord, so it's my turn to take out card." << endl;
+        cout << "I am lord, so it's my turn to take out first card." << endl;
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
         cout << "My (lord) take out cards is:" << endl;
@@ -443,6 +443,7 @@ string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
             takeoutCardReq.add_cards(vecTackOutCard[iIndex]);
         }
         takeoutCardReq.SerializeToString(&serializedStr);
+        cout << "Take out cards over." << endl;
     }
     return serializedStr;
 }
@@ -488,10 +489,10 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     if (seatnext == aiSeat)
     {
         //出牌
-        cout << "I'm fammer, it's my turn to take out card." << endl;
+        cout << "It's my turn to take out card." << endl;
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
-        cout << "My (fammer) take out cards is:" << endl;
+        cout << "My take out cards is:" << endl;
         printCardInfo(vecTackOutCard);
 
         TakeoutCardReq takeoutCardReq;
@@ -500,7 +501,11 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
             takeoutCardReq.add_cards(vecTackOutCard[iIndex]);
         }
         takeoutCardReq.SerializeToString(&serializedStr);
-        cout << "Take out card successed!" << endl;
+        cout << "Take out cards over." << endl;
+    }
+    else
+    {
+        cout << "It not my turn to take out card." << endl;
     }
     return serializedStr;
 }
@@ -519,7 +524,6 @@ string GetGameOverInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //message GameOverNtf {
     //    required int32 reason = 1[default=2];   // 结束原因：1-强制结束，2-达到最大游戏盘数
     //}
-    //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
     GameOverNtf gameOverNtf;
     if (!gameOverNtf.ParseFromString(msg))
@@ -530,7 +534,7 @@ string GetGameOverInfo::operation( OGLordRobotAI& robot, const string& msg ){
     int reason = gameOverNtf.reason();
     robot.RbtResetData();
     robot.SetStatus(INITGAME);
-    cout << "Receved game over notify successed." << endl;
+    cout << "Receved game over notify, reset robot to sign up condation." << endl;
     return serializedStr;
 }
 
@@ -547,7 +551,6 @@ string GetCallScoreResultInfo::operation( OGLordRobotAI& robot, const string& ms
     //message CallScoreAck {
     //    required int32 result = 1;
     //}
-    //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
     CallScoreAck callScoreAck;
     if (!callScoreAck.ParseFromString(msg))
@@ -556,7 +559,15 @@ string GetCallScoreResultInfo::operation( OGLordRobotAI& robot, const string& ms
         return serializedStr;
     }
     int result = callScoreAck.result();
-    cout << "Get call score result successed, call score result is: " << result << endl;
+
+    if (0 != result)
+    {
+        cout << "Get call score result, call score failed, result is: " << result << endl;
+    }
+    else
+    {
+        cout << "Get call score result, call score successed." << endl;
+    }
     return serializedStr;
 }
 
@@ -573,7 +584,6 @@ string GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& 
     //message TakeoutCardAck {
     //    required int32 result = 1;
     //}
-    //robot->RbtOutGetTakeOutCard(vecCards);
     string serializedStr;
     TakeoutCardAck takeoutCardAck;
     if (!takeoutCardAck.ParseFromString(msg))
@@ -582,7 +592,16 @@ string GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& 
         return serializedStr;
     }
     int result = takeoutCardAck.result();
-    cout << "Get take out result successed, " << result << endl;
+    cout << "Get take out card result, " << result << endl;
+    if (0 != result)
+    {
+        cout << "Get take out card result, take out card failed, result is: " << result << endl;
+        robot.RecoveryHandCards();//恢复手牌记录
+    }
+    else
+    {
+        cout << "Get take out card result, take out card successed." << endl;
+    }
     return serializedStr;
 }
 

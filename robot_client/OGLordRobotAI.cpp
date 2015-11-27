@@ -55,6 +55,13 @@ string OGLordRobotAI::RobotProcess(int msgId, const string& msg)
     return result;
 }
 
+void OGLordRobotAI::RecoveryHandCards()
+{
+    for (int i = 0; i < vecLastTakeOutCards.size(); ++i)
+    {
+        aiCardsVec.push_back(vecLastTakeOutCards[i]);
+    }
+}
 
 bool OGLordRobotAI::RbtInInitCard(int argSeat, std::vector<int> argHandCard)
 {
@@ -315,18 +322,17 @@ bool OGLordRobotAI::RbtOutGetTakeOutCard(std::vector<int> &vecCards)
 		if (checkHand.type != NOTHING && !isHandHigherThan(checkHand, curHand))
 		{
 			hand.type = NOTHING;
-			takeOutHand(hand, vecCards);
+            RecoveryHandCards();//恢复aiVecCards
+			takeOutHand(hand, vecCards);//清空vecCards
 		}
 	}
 
-
-
-	//cout << "remain cards after takeout: ";
-	//for (unsigned i=0; i<aiCardsVec.size(); ++i)
-	//{
-	//	cout << aiCardsVec[i] << " ";
-	//}
-	//cout << endl;
+	cout << "remain cards after takeout: ";
+	for (unsigned i=0; i<aiCardsVec.size(); ++i)
+	{
+		cout << aiCardsVec[i] << " ";
+	}
+	cout << endl;
 	return true;
 }
 
@@ -643,6 +649,7 @@ void OGLordRobotAI::findMostCardsHandNotBomb( Hand &hand )
 
 void OGLordRobotAI::takeOutHand(Hand &hand, std::vector<int> &takeOutCards)
 {
+    vecLastTakeOutCards.clear();//最后一次出牌自己的出牌记录
 	int points[CARD_POINT_NUM] = {0};
 	handToPointsArray(hand, points);
 	takeOutCards.clear();
@@ -653,6 +660,7 @@ void OGLordRobotAI::takeOutHand(Hand &hand, std::vector<int> &takeOutCards)
 		{
 			--points[point];
 			takeOutCards.push_back(*it);
+            vecLastTakeOutCards.push_back(*it);
 			it = aiCardsVec.erase(it);
 		}
 		else
