@@ -2,6 +2,7 @@
 #include <string>
 #include "NetLib.h"
 #include "confaccess.h"
+#include "log.h"
 
 using namespace std;
 
@@ -9,7 +10,7 @@ void InitConfig(const char *confFile)
 {
     if (NULL == confFile)
     {
-        cout << "Doesn't has configure file." << endl;
+        ERROR("Doesn't has configure file.");
         ::exit(0);
     }
     CConfAccess* confAccess = CConfAccess::GetConfInstance();
@@ -19,6 +20,7 @@ void InitConfig(const char *confFile)
 int main(int argc, char** argv)
 {
     const char confFile[] = "./robot.conf";
+    log::CLog::Initialize("");
     InitConfig(confFile);
     NetLib netLib;
     netLib.start();

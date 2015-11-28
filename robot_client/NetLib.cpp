@@ -12,6 +12,7 @@
 #include "connect.pb.h"
 #include "org_room2client.pb.h"
 #include "stringutil.h"
+#include "log.h"
 
 using namespace std;
 using namespace YLYQ;
@@ -24,7 +25,7 @@ NetLib::NetLib()
 {
     if (!Init())
     {
-        cout << "Get params error, please check configure file!" << endl;
+        ERROR("Get params error, please check configure file!");
         ::exit(0);
     }
     memset(&server_addr, 0, sizeof(server_addr) );
@@ -32,8 +33,7 @@ NetLib::NetLib()
     server_addr.sin_port = htons(port_);
     inet_aton(ip_.c_str(), &server_addr.sin_addr);
     base = event_init();
-    cout << "ip: " << ip_.c_str() << endl;
-    cout << "port: " << port_ << endl;
+    DEBUG("ip: %s, port: %d.", ip_.c_str(), port_);
 
     connect();
 
@@ -56,21 +56,21 @@ void NetLib::connect()
             if (!insertResult.second)
             {
                 //插入失败
-                cout << "ERROR: insert failed." << endl;
+                ERROR("Insert into bevToRobot failed.");
                 ::exit(0);
             }
             bufferevent_socket_connect(insertResult.first->first, (struct sockaddr *)&server_addr, sizeof(server_addr));
             bufferevent_setcb(insertResult.first->first, server_msg_cb, NULL, event_cb, this);
-            bufferevent_enable(insertResult.first->first, EV_READ | EV_PERSIST);
-            cout << "Create a connection, index is: " << index << ", init a Robot, Id is: " << robotIdStart_ + index << endl;
+            bufferevent_enable(insertResult.first->first, EV_READ | EV_WRITE);
+            DEBUG("Create a connection, index is: %d, init a Robot, Id is: %d.", index, robotIdStart_ + index);
         }
         else
         {
-            cout << "Robot Id range is bigger than robot num." << endl;
+            DEBUG("Robot Id range is bigger than robot num.");
             break;
         }
     }
-    cout << "Total init " << index << " robots and connections." << endl;
+    DEBUG("Total init %d robots and connections.", index);
 }
 
 void NetLib::start()
@@ -121,7 +121,7 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
     map<struct bufferevent*, OGLordRobotAI>::iterator it = (netlib->bevToRobot).find(bev);
     if ((netlib->bevToRobot).end() == it)
     {
-        cout << "Error! Cannot find robot." << endl;
+        ERROR("Cannot find robot.");
         return;
     }
 
@@ -130,7 +130,7 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
     int iMsgLen = 0;
     int msgId = 0;
     int dataLength = evbuffer_get_length(bufferevent_get_input(bev));
-    cout << "Reveive data length is: " << dataLength << endl;
+    //DEBUG("Reveive data length is: %d.", dataLength);
     while (dataLength > 0)
     {
         //读取msg length
@@ -138,65 +138,73 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
         len = bufferevent_read(bev, msgLen, 4);
         if (4 != len)
         {
-            cout << "Doesn't has 4 byte len info." << endl;
+            ERROR("Doesn't has 4 byte len info.");
             break;
         }
         int *pMsgLen = (int*)msgLen;
         iMsgLen = ntohl(*pMsgLen);
         if (0 == iMsgLen)
         {
-            cout << "Error! Convent data length failed." << endl;
+            ERROR("Error! Convent data length failed.");
             break;
         }
-        cout << "Msg len: " << iMsgLen << endl;
+        //DEBUG("Msg len: %d.", iMsgLen);
 
         //读取msgid
         memset(msgLen, '\0', 4);
         len = bufferevent_read(bev, msgLen, 4);
         if (4 != len)
         {
-            cout << "Doesn't has 4 byte MsgId info." << endl;
+            ERROR("Doesn't has 4 byte MsgId info.");
             break;
         }
         pMsgLen = (int*)msgLen;
         msgId = ntohl(*pMsgLen);
-        cout << "MsgId is: " << msgId << endl;
+        //DEBUG("MsgId is: %d.", msgId);
 
         //读取消息体
         char* msg = new char[iMsgLen + 1];
         len = bufferevent_read(bev, msg, iMsgLen);
-        cout << "Receive " << len << " byte from server for robot :" << (it->second).GetRobotId()
-            << " in message " << msgId << endl;
+        DEBUG("Receive %d byte from server for robot %d in message %d.", len, (it->second).GetRobotId(), msgId);
 
         string strMsg;
         strMsg.append(msg, iMsgLen);
         delete [] msg;
-        string strRet = (it->second).RobotProcess(msgId, strMsg);
+        string strRet;
+        bool result = (it->second).RobotProcess(msgId, strMsg, strRet);
 
-        if (0 != strRet.length())
+        if (result)
         {
-            if (NOTIFY_CALLSCORE == msgId || NOTIFY_TAKEOUT == msgId ||\
-                NOTIFY_DEALCARD == msgId || NOTIFY_BASECARD == msgId)
+            int msgIdBak = msgId;
+            if (NOTIFY_CALLSCORE == msgId || NOTIFY_DEALCARD == msgId)
             {
-                if (NOTIFY_CALLSCORE == msgId || NOTIFY_DEALCARD == msgId)
-                {
-                    msgId = MSGID_CALLSCORE_REQ;
-                }
-                else if (NOTIFY_TAKEOUT == msgId || NOTIFY_BASECARD == msgId)
-                {
-                    msgId = MSGID_TAKEOUT_REQ;
-                }
-                string strSend = netlib->SerializeMsg(msgId, strRet);
+                msgId = MSGID_CALLSCORE_REQ;
+            }
+            else if (NOTIFY_TAKEOUT == msgId || NOTIFY_BASECARD == msgId)
+            {
+                msgId = MSGID_TAKEOUT_REQ;
+            }
+            string strSend = netlib->SerializeMsg(msgId, strRet);
+
+            if (NOTIFY_DEALCARD == msgIdBak || NOTIFY_BASECARD == msgIdBak)
+            {
+                //添加延时发送消息的定时器
+                pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobotId());
+                evtimer_set(&netlib->ev_timer_delay, delay_send_msg_time_cb, oneMsgNode);
+                event_add(&(netlib->ev_timer_delay), &(netlib->timerEventDelay));
+                DEBUG("Add a timer, will delay send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
+            }
+            else
+            {
                 //把消息发送给服务器端
                 bufferevent_write(bev, strSend.c_str(), strSend.length());
-                cout << "Send message: " << msgId << " to server for robot :"
-                    << (it->second).GetRobotId() << endl;
+                DEBUG("Send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
             }
         }
         dataLength = evbuffer_get_length(bufferevent_get_input(bev));
-        cout << "Data still has length: " << dataLength << endl;
+        //DEBUG("Data still has length %d.", dataLength);
     }
-    cout << "Read data this time over." << endl;
+    //DEBUG("Read data this time over.");
 }
 
 void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
@@ -214,7 +222,7 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
     {
         bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
     }
-    cout << "Send once heard beat." << endl;
+    DEBUG("Send once heard beat.");
     event_add(&(netlib->ev_timer_heart_beat), &(netlib->timerEventHeartBeat));/*重新添加定时器*/
 }
 
@@ -241,7 +249,7 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
             verifyReq.SerializeToString(&serializedStr);
             serializedStr = netlib->SerializeMsg(connect::MSGID_VERIFY_REQ, serializedStr);
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
-            cout << "Robot " << (it->second).GetRobotId() << " send verify successed." << endl;
+            DEBUG("Robot %d send verify once.", (it->second).GetRobotId());
             bHasUnviryfiedRobot = true;
         }
     }
@@ -275,7 +283,7 @@ void NetLib::init_game_time_cb(int fd, short events, void* arg)
         if (VERIFIED == (it->second).GetStatus())
         {
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
-            cout << "Robot " << (it->second).GetRobotId() << " send init game successed." << endl;
+            DEBUG("Robot %d send init game once.", (it->second).GetRobotId());
             bHasUnInitedRobot = true;
         }
     }
@@ -304,7 +312,7 @@ void NetLib::sign_up_cond_time_cb(int fd, short events, void* arg)
         if (INITGAME == (it->second).GetStatus())
         {
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
-            cout << "Robot " << (it->second).GetRobotId() << " send sign up cond req successed" << endl;
+            DEBUG("Robot %d send init sign up cond req once.", (it->second).GetRobotId());
         }
     }
     event_add(&(netlib->ev_timer_sign_in_cond), &(netlib->timerEventSignInCond));/*重新添加定时器*/
@@ -331,10 +339,18 @@ void NetLib::sign_up_time_cb(int fd, short events, void* arg)
             serializedStr = netlib->SerializeMsg(org_room2client::MSGID_DDZ_SIGN_UP_REQ, serializedStr);
 
             bufferevent_write(it->first, serializedStr.c_str(), serializedStr.length());
-            cout << "Robot " << (it->second).GetRobotId() << " send sign up req successed" << endl;
+            DEBUG("Robot %d send init sign up req once.", (it->second).GetRobotId());
         }
     }
     event_add(&(netlib->ev_timer_sign_in), &(netlib->timerEventSignIn));/*重新添加定时器*/
+}
+
+void NetLib::delay_send_msg_time_cb(int fd, short events, void* arg)
+{
+    pMsgNode oneMsgNode = static_cast<pMsgNode>(arg);
+    bufferevent_write(oneMsgNode->bev_, (oneMsgNode->msg_).c_str(), (oneMsgNode->msg_).length());
+    DEBUG("Send delay message: %d to server for robot %d.", oneMsgNode->msgId_, oneMsgNode->robotId_);
+    delete oneMsgNode;
 }
 
 void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
@@ -342,15 +358,15 @@ void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
     NetLib* netlib = static_cast<NetLib*>(arg);
     if (event & BEV_EVENT_EOF)
     {
-        cout << "connection closed." << endl;
+        DEBUG("Connection closed.");
     }
     else if (event & BEV_EVENT_ERROR)
     {
-        printf("some other error\n");
+        ERROR("Some other error.");
     }
     else if( event & BEV_EVENT_CONNECTED)
     {
-        printf("the client has connected to server\n");
+        DEBUG("One client has connected to server.");
         return ;
     }
 
@@ -360,7 +376,7 @@ void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
     {
         //这将自动close套接字和free读写缓冲区
         bufferevent_free(bev);
-        cout << "Robot " << (it->second).GetRobotId() << " disconnected." << endl;
+        DEBUG("Robot %d disconnected.", (it->second).GetRobotId());
         (netlib->bevToRobot).erase(it);
     }
 }
@@ -403,7 +419,7 @@ bool NetLib::Init()
         initGameTime_ = ::atoi(strInitGameTime.c_str());
         signUpCondTime_ = ::atoi(strSignUpCondTime.c_str());
         signUpTime_ = ::atoi(strSignUpTime.c_str());
-        cout << "Get configure successed." << endl;
+        DEBUG("Get configure successed.");
     }
     return bResult;
 
@@ -431,30 +447,35 @@ void NetLib::InitTimer()
     timerEventSignIn.tv_sec = signUpTime_;
     timerEventSignIn.tv_usec = 0;
 
+    //延时发送消息定时器初始化
+    timerEventDelay.tv_sec = 5;//先设为5s
+    timerEventDelay.tv_usec = 0;
+
     //添加心跳协议定时器
     evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, this);
     event_add(&ev_timer_heart_beat, &timerEventHeartBeat);
-    cout << "Heart beat timer started!" << endl;
+    DEBUG("Heart beat timer started!");
 
     //添加验证身份定时器
     evtimer_set(&ev_timer_verify, verify_time_cb, this);
     event_add(&ev_timer_verify, &timerEventVerify);
-    cout << "Verify timer started!" << endl;
+    DEBUG("Verify timer started!");
 
     //添加初始化游戏定时器
     evtimer_set(&ev_timer_init_game, init_game_time_cb, this);
     event_add(&ev_timer_init_game, &timerEventInitGame);
-    cout << "Init game timer started!" << endl;
+    DEBUG("Init game timer started!");
 
     //添加查询报名条件定时器
     evtimer_set(&ev_timer_sign_in_cond, sign_up_cond_time_cb, this);
     event_add(&ev_timer_sign_in_cond, &timerEventSignInCond);
-    cout << "Sign up cond timer started!" << endl;
+    DEBUG("Sign up cond timer started!");
 
     //添加报名定时器
     evtimer_set(&ev_timer_sign_in, sign_up_time_cb, this);
     event_add(&ev_timer_sign_in, &timerEventSignIn);
-    cout << "Sign up timer started!" << endl;
+
+    DEBUG("Sign up timer started!");
 }
 
 

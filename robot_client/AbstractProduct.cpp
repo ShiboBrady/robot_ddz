@@ -5,6 +5,8 @@
 #include "connect.pb.h"
 #include "org_room2client.pb.h"
 #include "message.pb.h"
+#include "log.h"
+#include <sstream>
 
 using namespace PBGameDDZ;
 using namespace YLYQ;
@@ -14,62 +16,46 @@ using namespace message;
 using namespace org_room2client;
 using namespace AIUtils;
 
-AbstractProduct::AbstractProduct(){
-}
-
-
-AbstractProduct::~AbstractProduct(){
+void sleep_ms( unsigned int secs )
+{
+    struct timeval tval;
+    tval.tv_sec = secs / 1000;
+    tval.tv_usec = (secs * 1000) % 1000000;
+    select(0, NULL ,NULL, NULL, &tval);
 }
 
 //请求认证回应
-GetVerifyAckInfo::GetVerifyAckInfo(){
-}
-
-
-GetVerifyAckInfo::~GetVerifyAckInfo(){
-}
-
-
-string GetVerifyAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetVerifyAckInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     //message VerifyAck {
     //    required int32 result = 1;
     //    optional string gameName = 2;       // 如果正在游戏中，返回游戏名称，客户端进行初始化，自动快速开始
     //}
-    string serializedStr;
     VerifyAck verifyAck;
     if (!verifyAck.ParseFromString(msg))
     {
-        cout << "parse verify ack pb message error." << endl;
-        return serializedStr;
+        ERROR("parse verify ack pb message error.");
+        //cout << "parse verify ack pb message error." << endl;
+        return false;
     }
     int result = verifyAck.result();
     if (message::SUCCESS == result)
     {
         //认证成功，开始初始化游戏
         robot.SetStatus(VERIFIED);
-        cout << "Robot " << robot.GetRobotId() << " Verify successed, result is: " << result << ", robot status is: " << robot.GetStatus() << endl;
+        DEBUG("Robot %d verify successed, result is: %d.", robot.GetRobotId(), robot.GetStatus());
     }
     else
     {
-        cout << "Robot " << robot.GetRobotId() << " Verify failed, result is: " << result << endl;
+        DEBUG("Robot %d verify failed, result is: %d.", robot.GetRobotId(), result);
     }
-    return serializedStr;
+    return false;
 }
 
 //初始化游戏回应
-GetInitGameAckInfo::GetInitGameAckInfo(){
-}
-
-
-GetInitGameAckInfo::~GetInitGameAckInfo(){
-}
-
-
-string GetInitGameAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetInitGameAckInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     //message InitGameAck {
     //    required int32 result = 1;
     //}
-    string serializedStr;
     InitGameAck initGameAck;
     initGameAck.ParseFromString(msg);
     int result = initGameAck.result();
@@ -77,23 +63,17 @@ string GetInitGameAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
     {
         //初始化成功，开始查询报名条件
         robot.SetStatus(INITGAME);
-        cout << "Robot " << robot.GetRobotId() << " Game Init successed, result is: " << result << ", robot status is: " << robot.GetStatus() << endl;
+        DEBUG("Robot %d Game Init successed, robot status is: %d.", robot.GetRobotId(), robot.GetStatus());
     }
     else
     {
-        cout << "Robot " << robot.GetRobotId() << " Game Init failed, result is: " << result << endl;
+        DEBUG("Robot %d Game Init failed, result is: %d.", robot.GetRobotId(), result);
     }
-    return serializedStr;
+    return false;
 }
 
 //查询报名条件
-GetSignUpCondAckInfo::GetSignUpCondAckInfo(){
-}
-
-GetSignUpCondAckInfo::~GetSignUpCondAckInfo(){
-}
-
-string GetSignUpCondAckInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetSignUpCondAckInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     //message OrgRoomDdzSignUpConditionAck {
     //    required int32 result = 1;
     //    message Limit {
@@ -113,28 +93,26 @@ string GetSignUpCondAckInfo::operation( OGLordRobotAI& robot, const string& msg 
     //    optional int32 startSignUpTime = 6; // 开始报名时间, time_t
     //    optional int32 endSignUpTime = 7;   // 结束报名时间, time_t
     //}
-    string serializedStr;
     OrgRoomDdzSignUpConditionAck orgRoomDdzSignUpConditionAck;
     orgRoomDdzSignUpConditionAck.ParseFromString(msg);
     int result = orgRoomDdzSignUpConditionAck.result();
     if (message::SUCCESS != result)
     {
-        cout << "Robot " << robot.GetRobotId() << " Sign up condition failed, result is: " << result << ", robot status is: " << robot.GetStatus() << endl;
-        return serializedStr;
+        DEBUG("Robot %d sign up condition failed, result is: %d.", robot.GetRobotId(), result);
+        return false;
     }
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
-        cout << "Robot " << robot.GetRobotId() << " Can sign up for free." << endl;
+        DEBUG("Robot %d can sign up for free.", robot.GetRobotId());
         robot.SetCost(0);
         robot.SetStatus(CANSINGUP);
-        return serializedStr;
     }
     else
     {
         bool cond = orgRoomDdzSignUpConditionAck.limit().enable();
         if (cond)
         {
-            cout << "Robot " << robot.GetRobotId() << " Can sign up." << endl;
+            DEBUG("Robot %d can sign up.", robot.GetRobotId());
             robot.SetStatus(CANSINGUP);
             int costSize = orgRoomDdzSignUpConditionAck.costlist_size();
             int index = 0;
@@ -143,33 +121,25 @@ string GetSignUpCondAckInfo::operation( OGLordRobotAI& robot, const string& msg 
                 if (orgRoomDdzSignUpConditionAck.costlist(index).enable())
                 {
                     robot.SetCost(orgRoomDdzSignUpConditionAck.costlist(index).id());
-                    cout << "Found enable cost in costlist, id is: " << robot.GetCost() << endl;
+                    DEBUG("Found enable cost in costlist, id is: %d.", robot.GetCost())
                     break;
                 }
             }
             if (costSize == index)
             {
-                cout << "Doesn't found enable cost in costlist." << endl;
+                ERROR("Doesn't found enable cost in costlist.");
             }
-            return serializedStr;
         }
         else
         {
-            cout << "Robot " << robot.GetRobotId() << " Cann't sign up." << endl;
-            return serializedStr;
+            DEBUG("Robot %d cann't sign up.", robot.GetRobotId());
         }
     }
-
+    return false;
 }
 
 //报名结果回应
-GetSignUpAckInfo::GetSignUpAckInfo(){
-}
-
-GetSignUpAckInfo::~GetSignUpAckInfo(){
-}
-
-string GetSignUpAckInfo::operation(OGLordRobotAI & robot, const string & msg){
+bool GetSignUpAckInfo::operation( OGLordRobotAI & robot, const string & msg, string& serializedStr ){
     //message OrgRoomDdzSignUpAck {
     //    required int32 result = 1;
     //    message CostGoods {
@@ -179,7 +149,6 @@ string GetSignUpAckInfo::operation(OGLordRobotAI & robot, const string & msg){
     //    repeated CostGoods costList = 2;
     //    optional int32 userCount = 3;   // 已报名人数
     //}
-    string serializedStr;
     OrgRoomDdzSignUpAck orgRoomDdzSignUpAck;
     orgRoomDdzSignUpAck.ParseFromString(msg);
     int result = orgRoomDdzSignUpAck.result();
@@ -187,28 +156,18 @@ string GetSignUpAckInfo::operation(OGLordRobotAI & robot, const string & msg){
     {
         //报名成功，开始等待游戏
         robot.SetStatus(SIGNUPED);
-        cout << "Robot " << robot.GetRobotId() << " Sign up succssed, result is: " << result << ", robot status is: " << robot.GetStatus() << endl;
+        DEBUG("Robot %d sign up succssed, robot status is: %d.", robot.GetRobotId(), robot.GetStatus());
     }
     else
     {
-        cout << "Robot " << robot.GetRobotId() << " Sign up failed, result is: " << result << endl;
+        DEBUG("Robot %d sign up failed, result is: %d.", robot.GetRobotId(), result);
     }
-    return serializedStr;
+    return false;
 }
-
-
 
 /*++++++++++++++++++游戏阶段 开始++++++++++++++++++++++*/
 //游戏开始
-GetGameStartInfo::GetGameStartInfo(){
-}
-
-
-GetGameStartInfo::~GetGameStartInfo(){
-}
-
-
-string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 游戏开始
     //message GameStartNtf {
     //    required string gameName = 1;       // 游戏服务通道号
@@ -216,22 +175,21 @@ string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //    repeated UserInfo userinfo  = 3;    // 用户信息
     //    optional MatchInfo matchInfo = 4;   // 如果是游戏场，该字段不用
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     GameStartNtf gameStartNtf;
     if (!gameStartNtf.ParseFromString(msg))
     {
-        cout << "parse pb message GameStartNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message GameStartNtf error.");
+        return false;
     }
     int index = 0;
     int iUserNum = gameStartNtf.userinfo_size();
-    cout << gameStartNtf.gamename() << endl;
-    cout << iUserNum << endl;
     int robotId = robot.GetRobotId();
     for (index = 0; index < iUserNum; ++index)//寻找自己的座位号:0-2
     {
-        cout << "total userNum: " << iUserNum << ", robot name: " << robotId << ", netname:" << ::atoi(gameStartNtf.userinfo(index).username().c_str()) << endl;
-        if (::atoi(gameStartNtf.userinfo(index).username().c_str()) == robotId)
+        int netId = ::atoi(gameStartNtf.userinfo(index).username().c_str());
+        DEBUG("total userNum: %d, robot id: %d, net id: %d.", iUserNum, robotId, netId);
+        if (netId == robotId)
         {
             break;
          }
@@ -239,45 +197,37 @@ string GetGameStartInfo::operation( OGLordRobotAI& robot, const string& msg ){
 
     if (iUserNum == index)
     {
-        cout << "Doesn't find robot name." << endl;
+        DEBUG("Doesn't find robot name.");
     }
     else
     {
         robot.SetAiSeat(index);
-        cout << "Set robot seat successed, seat is: " << index << endl;
+        DEBUG("Set robot seat successed, seat is: %d.", index);
     }
-    return serializedStr;
+    return false;
 }
 
 
 //发牌
-InitHardCard::InitHardCard(){
-}
-
-
-InitHardCard::~InitHardCard(){
-}
-
-
-string InitHardCard::operation( OGLordRobotAI& robot, const string& msg ){
+bool InitHardCard::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 发牌
     //message DealCardNtf {
     //    required int32 headerseat = 1;          // 第一个叫分座位号
     //    repeated HandCardList cards = 2;        // 玩家手牌
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     DealCardNtf dealCardNtf;
     if (!dealCardNtf.ParseFromString(msg))
     {
-        cout << "parse pb message DealCardNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message DealCardNtf error.");
+        return false;
     }
     int aiSeat = robot.GetAiSeat();
-    cout << "my seat is: " << aiSeat << endl;
+    DEBUG("my seat is: %d.", aiSeat);
     if (-1 == aiSeat)
     {
-        cout << "Not init seat info." << endl;
-        return serializedStr;
+        ERROR("Not init seat info.");
+        return false;
     }
     int hearderSeat = dealCardNtf.headerseat();
     int cardsSize = dealCardNtf.cards(aiSeat).cards_size();//查看自己的那手牌信息
@@ -288,7 +238,7 @@ string InitHardCard::operation( OGLordRobotAI& robot, const string& msg ){
         vecHandCard.push_back(dealCardNtf.cards(aiSeat).cards(index));
     }
     robot.RbtInInitCard(aiSeat, vecHandCard);
-    cout << "Init hand card successed, hand card info is: " << endl;
+    DEBUG("Init hand card successed, hand card info is: ");
     printCardInfo(vecHandCard);
 
     //判断自己是不是第一个叫分座位号
@@ -298,39 +248,46 @@ string InitHardCard::operation( OGLordRobotAI& robot, const string& msg ){
         robot.RbtOutGetCallScore(myScore);
         CallScoreReq callScoreReq;
         callScoreReq.set_score(myScore);
-        callScoreReq.SerializeToString(&serializedStr);
+        DEBUG("hearderSeat is: %d, I'm is the first to call score, my score is: %d.", hearderSeat, myScore);
+        if (!callScoreReq.SerializeToString(&serializedStr))
+        {
+            ERROR("callScoreReq serialize failed.");
+        }
+        else
+        {
+            DEBUG("callScoreReq serialize successe.");
+        }
+        return true;
     }
-    return serializedStr;
+    return false;
 }
 
 //收到叫分通知
-GetCallScoreInfo::GetCallScoreInfo(){
-}
-
-
-GetCallScoreInfo::~GetCallScoreInfo(){
-}
-
-
-string GetCallScoreInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetCallScoreInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 叫分
     //message UserCallScoreNtf {
     //    required int32 seatno = 1;                  // 座位号
     //    required int32 seatnext = 2[default=-1];    // 下一个叫分座位，-1叫分结束
     //    required int32 score = 3;                   // 叫分值(1/2/3), 0-不叫
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     UserCallScoreNtf userCallScoreNtf;
     if (!userCallScoreNtf.ParseFromString(msg))
     {
-        cout << "parse pb message UserCallScoreNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message UserCallScoreNtf error.");
+        return false;
     }
     int seatNo = userCallScoreNtf.seatno();
     int seatNext = userCallScoreNtf.seatnext();
     int score = userCallScoreNtf.score();
     int aiSeat = robot.GetAiSeat();
 
+    DEBUG("seatno: %d, seatnext: %d, score: %d, my seat: %d.", seatNo, seatNext, score, aiSeat);
+    if (-1 == seatNext)
+    {
+        //停止叫分
+        return false;
+    }
     if (seatNext != aiSeat)
     {
         //没轮到自己，不叫
@@ -341,80 +298,72 @@ string GetCallScoreInfo::operation( OGLordRobotAI& robot, const string& msg ){
         int myScore = 0;
         robot.RbtOutGetCallScore(myScore);
         int curScore = robot.GetCurScore();
-        cout << "My score is: " << myScore << " Cur score is: " << curScore << endl;
+        DEBUG("My score is: %d, current score is: %d.", myScore, curScore);
 
         CallScoreReq callScoreReq;
         if (score >= myScore)
         {
             //目前分数比自己的大，不叫
             callScoreReq.set_score(0);
-            cout << "Doesn't choose call score, curScore is: " << curScore << endl;
+            DEBUG("Doesn't choose call score, curScore is: %d.", curScore);
         }
         else if (score == 0 && robot.GetCurScore() >= myScore)
         {
             //上一个用户没叫，且上上一个用户叫的分比自己的高，不叫
             callScoreReq.set_score(0);
-            cout << "Doesn't choose call score, curScore is: " << curScore << endl;
+            DEBUG("Doesn't choose call score, curScore is: %d.", curScore);
         }
         else
         {
             //叫分
             callScoreReq.set_score(myScore);
-            cout << "Choose to call score, score is: " << myScore << endl;
+            DEBUG("Choose to call score, score is: %d.", myScore);
         }
-        callScoreReq.SerializeToString(&serializedStr);
+        if (!callScoreReq.SerializeToString(&serializedStr))
+        {
+            ERROR("callScoreReq serialize failed.");
+        }
+        else
+        {
+            DEBUG("callScoreReq serialize successe.");
+        }
+        return true;
     }
-    return serializedStr;
+    return false;
 }
 
 //收到地主信息
-GetLordInfo::GetLordInfo(){
-}
-
-
-GetLordInfo::~GetLordInfo(){
-}
-
-
-string GetLordInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetLordInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 地主确定
     //message LordSetNtf {
     //    required int32 seatlord = 1;    // 地主座位号
     //    required int32 callscore = 2;   // 地主叫分
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     LordSetNtf lordSetNtf;
     if (!lordSetNtf.ParseFromString(msg))
     {
-        cout << "parse pb message LordSetNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message LordSetNtf error.");
+        return false;
     }
     int seatLord = lordSetNtf.seatlord();
     robot.SetLordSeat(seatLord);
-    cout << "Set lord info over, " << seatLord << endl;
-    return serializedStr;
+    DEBUG("Set lord info %d over.", seatLord);
+    return false;
 }
 
 //收到底牌
-GetBaseCardInfo::GetBaseCardInfo(){
-}
-
-
-GetBaseCardInfo::~GetBaseCardInfo(){
-}
-
-
-string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 发底牌
     //message SendBaseCardNtf {
     //    repeated int32 basecards = 1;   // 底牌数据
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     SendBaseCardNtf sendBaseCardNtf;
     if (!sendBaseCardNtf.ParseFromString(msg))
     {
-        cout << "parse pb message SendBaseCardNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message SendBaseCardNtf error.");
+        return false;
     }
     int baseCardSize = sendBaseCardNtf.basecards_size();
     int seatLord = robot.GetLordSeat();
@@ -423,18 +372,18 @@ string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     {
         vecBaseCard.push_back(sendBaseCardNtf.basecards(index));
     }
-    cout << "Base card info:" << endl;
+    DEBUG("Base card info:");
     printCardInfo(vecBaseCard);
     robot.RbtInSetLord(seatLord, vecBaseCard);
-    cout << "Set base card over." << endl;
+    DEBUG("Set base card over.");
 
     //判断自己是不是地主
     if (robot.GetLordSeat() == robot.GetAiSeat())
     {
-        cout << "I am lord, so it's my turn to take out first card." << endl;
+        DEBUG("I am lord, so it's my turn to take out first card.");
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
-        cout << "My (lord) take out cards is:" << endl;
+        DEBUG("My (lord) take out cards is:");
         printCardInfo(vecTackOutCard);
 
         TakeoutCardReq takeoutCardReq;
@@ -442,22 +391,21 @@ string GetBaseCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
         {
             takeoutCardReq.add_cards(vecTackOutCard[iIndex]);
         }
-        takeoutCardReq.SerializeToString(&serializedStr);
-        cout << "Take out cards over." << endl;
+        if (!takeoutCardReq.SerializeToString(&serializedStr))
+        {
+            ERROR("Take cout card req serialize failed!");
+        }
+        else
+        {
+            DEBUG("Take out cards over, serialized string size is: %d.", serializedStr.length());
+        }
+        return true;
     }
-    return serializedStr;
+    return false;
 }
 
 //收到出牌通知
-GetTakeOutCardInfo::GetTakeOutCardInfo(){
-}
-
-
-GetTakeOutCardInfo::~GetTakeOutCardInfo(){
-}
-
-
-string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 出牌
     //message TakeoutCardNtf {
     //    required int32 seatno = 1;      // 出牌座位号
@@ -466,33 +414,35 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
     //    required int32 cardtype = 4;    // 类型
     //    required int32 multiple = 5;    // 当前倍数(炸弹产生的倍数)
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     TakeoutCardNtf takeoutCardNtf;
     if (!takeoutCardNtf.ParseFromString(msg))
     {
-        cout << "parse pb message TakeoutCardNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message TakeoutCardNtf error.");
+        return false;
     }
     int seatno = takeoutCardNtf.seatno();
     int seatnext = takeoutCardNtf.seatnext();
     int cardsNum = takeoutCardNtf.cards_size();
+    int aiSeat = robot.GetAiSeat();
+    DEBUG("seatno: %d, seatnext: %d, cards num: %d, my seat: %d.", seatno, seatnext, cardsNum, aiSeat);
     vector<int> vecOppTackOutCard;
     for (int index = 0; index < cardsNum; ++index)
     {
         vecOppTackOutCard.push_back(takeoutCardNtf.cards(index));
     }
-    cout << "Current card info is:" << endl;
+    DEBUG("Current card info is:");
     printCardInfo(vecOppTackOutCard);
     robot.RbtInTakeOutCard(seatno, vecOppTackOutCard);
 
-    int aiSeat = robot.GetAiSeat();
+
     if (seatnext == aiSeat)
     {
         //出牌
-        cout << "It's my turn to take out card." << endl;
+        DEBUG("It's my turn to take out card.");
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
-        cout << "My take out cards is:" << endl;
+        DEBUG("My take out cards is:");
         printCardInfo(vecTackOutCard);
 
         TakeoutCardReq takeoutCardReq;
@@ -500,109 +450,124 @@ string GetTakeOutCardInfo::operation( OGLordRobotAI& robot, const string& msg ){
         {
             takeoutCardReq.add_cards(vecTackOutCard[iIndex]);
         }
-        takeoutCardReq.SerializeToString(&serializedStr);
-        cout << "Take out cards over." << endl;
+        if (!takeoutCardReq.SerializeToString(&serializedStr))
+        {
+            ERROR("Take cout card req serialize failed!");
+        }
+        else
+        {
+            DEBUG("Take out cards over, serialized string size is: %d.", serializedStr.length());
+        }
+        return true;
     }
     else
     {
-        cout << "It not my turn to take out card." << endl;
+        DEBUG("It not my turn to take out card.");
     }
-    return serializedStr;
+    return false;
 }
 
 //游戏结束
-GetGameOverInfo::GetGameOverInfo(){
-}
-
-
-GetGameOverInfo::~GetGameOverInfo(){
-}
-
-
-string GetGameOverInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetGameOverInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     // 游戏结束通知
     //message GameOverNtf {
     //    required int32 reason = 1[default=2];   // 结束原因：1-强制结束，2-达到最大游戏盘数
     //}
-    string serializedStr;
     GameOverNtf gameOverNtf;
     if (!gameOverNtf.ParseFromString(msg))
     {
-        cout << "parse pb message GameOverNtf error." << endl;
-        return serializedStr;
+        ERROR("parse pb message GameOverNtf error.");
+        return false;
     }
     int reason = gameOverNtf.reason();
     robot.RbtResetData();
     robot.SetStatus(INITGAME);
-    cout << "Receved game over notify, reset robot to sign up condation." << endl;
-    return serializedStr;
+    DEBUG("Receved game over notify, reset robot to sign up condation.");
+    return false;
+}
+//
+//游戏结果
+bool GetGameResultInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
+    // 游戏结果(游戏场和比赛场通用)
+    //message OrgRoomDdzGameResultNtf {
+    //    required int32 seatlord = 1;        // 地主的座位号
+    //    required int32 seatwin = 2;         // 胜利座位
+    //    required int32 multiple_base = 3;   // 基础倍数(叫分值)
+    //    required int32 bombs = 4;           // 普通炸弹个数
+    //    required bool  hasrocket = 5;       // 是否有火箭
+    //    required bool  hasspring = 6;       // 是否春天
+    //    required string guid = 7;
+    //    message UserResult {
+    //        required string userId = 1;
+    //        required int64 chip_change = 2; // 筹码变化
+    //        required int64 chip_now = 3;    // 当前筹码
+    //        repeated int32 cards = 4;       // 玩家手牌
+    //    }
+    //    repeated UserResult userresult = 8;
+    //    required int32 tax = 9;             // 服务费
+    //    required int32 incExp = 10;         // 增加的经验值
+    //    required int32 incVipPoints = 11;   // 增加的竞技点
+    //}
+    OrgRoomDdzGameResultNtf orgRoomDdzGameResultNtf;
+    if (!orgRoomDdzGameResultNtf.ParseFromString(msg))
+    {
+        ERROR("parse pb message OrgRoomDdzGameResultNtf error.");
+        return false;
+    }
+    robot.RbtResetData();
+    robot.SetStatus(INITGAME);
+    DEBUG("Receved game result notify, reset robot to sign up condation.");
+    return false;
 }
 
 //获取叫分结果
-GetCallScoreResultInfo::GetCallScoreResultInfo(){
-}
-
-
-GetCallScoreResultInfo::~GetCallScoreResultInfo(){
-}
-
-
-string GetCallScoreResultInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetCallScoreResultInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     //message CallScoreAck {
     //    required int32 result = 1;
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     CallScoreAck callScoreAck;
     if (!callScoreAck.ParseFromString(msg))
     {
-        cout << "parse pb message CallScoreAck error." << endl;
-        return serializedStr;
+        ERROR("parse pb message CallScoreAck error.");
+        return false;
     }
     int result = callScoreAck.result();
 
     if (0 != result)
     {
-        cout << "Get call score result, call score failed, result is: " << result << endl;
+        ERROR("Get call score result, call score failed, result is: %d.", result);
     }
     else
     {
-        cout << "Get call score result, call score successed." << endl;
+        DEBUG("Get call score result, call score successed.");
     }
-    return serializedStr;
+    return false;
 }
 
 //获取出牌结果
-GetTakeOutCardResultInfo::GetTakeOutCardResultInfo(){
-}
-
-
-GetTakeOutCardResultInfo::~GetTakeOutCardResultInfo(){
-}
-
-
-string GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& msg ){
+bool GetTakeOutCardResultInfo::operation( OGLordRobotAI& robot, const string& msg, string& serializedStr ){
     //message TakeoutCardAck {
     //    required int32 result = 1;
     //}
-    string serializedStr;
+    robot.SetStatus(GAMMING);
     TakeoutCardAck takeoutCardAck;
     if (!takeoutCardAck.ParseFromString(msg))
     {
-        cout << "parse pb message TakeoutCardAck error." << endl;
-        return serializedStr;
+        ERROR("parse pb message TakeoutCardAck error.");
+        return false;
     }
     int result = takeoutCardAck.result();
-    cout << "Get take out card result, " << result << endl;
     if (0 != result)
     {
-        cout << "Get take out card result, take out card failed, result is: " << result << endl;
+        ERROR("Get take out card result, take out card failed, result is: %d.", result);
         robot.RecoveryHandCards();//恢复手牌记录
     }
     else
     {
-        cout << "Get take out card result, take out card successed." << endl;
+        DEBUG("Get take out card result, take out card successed.");
     }
-    return serializedStr;
+    return false;
 }
 
 /*++++++++++++++++++游戏阶段 结束++++++++++++++++++++++*/

@@ -3,7 +3,8 @@ TARGET = robot_client
 CC = g++
 
 LIB = -lprotobuf\
-      -levent
+      -levent\
+	  -llog4cplus -lpthread
 
 OBJC = $(subst .cpp,.o,$(wildcard *.cpp)) 
 

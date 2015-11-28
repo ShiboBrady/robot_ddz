@@ -25,6 +25,9 @@ AbstractProduct* SimpleFactory::createProduct(int type){
         case NOTIFY_GAMEOVER:
             temp = new GetGameOverInfo();
             break;
+        case MSGID_DDZ_GAME_RESULT_NTF:
+            temp = new GetGameResultInfo();
+            break;
         case MSGID_CALLSCORE_ACK:
             temp = new GetCallScoreResultInfo();
             break;

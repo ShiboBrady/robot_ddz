@@ -110,7 +110,7 @@ public:
     virtual void SetLordSeat( int lordSeat ) { this->lordSeat = lordSeat; };
     virtual int GetLordSeat() { return lordSeat; };
 
-    std::string RobotProcess( int msgId, const std::string& msg );
+    bool RobotProcess( int msgId, const std::string& msg, std::string& result );
 
     void RecoveryHandCards();
 private:

@@ -1,7 +1,7 @@
 #include "OGLordRobotAI.h"
 #include "AIUtils.h"
 #include "message.pb.h"
-
+#include "log.h"
 
 using namespace std;
 using namespace AIUtils;
@@ -28,31 +28,28 @@ OGLordRobotAI::~OGLordRobotAI(void)
 {
 }
 
-string OGLordRobotAI::RobotProcess(int msgId, const string& msg)
+bool OGLordRobotAI::RobotProcess(int msgId, const string& msg, string& result)
 {
-    string result;
-
     //处理消息
     product = factory.createProduct(msgId);
     if (NULL == product)
     {
         cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
-        return result;
+        return false;
     }
     YLYQ::Protocol::message::Message message;
     if (!message.ParseFromString(msg))
     {
         cout << "Parse message pb error." << endl;
-        return result;
+        return false;
     }
     if (!message.has_body())
     {
         cout << "Doesn't has body info." << endl;
-        return result;
+        return false;
     }
     string bodyMsg = message.body();
-    result = product->operation(*this, bodyMsg);
-    return result;
+    return product->operation(*this, bodyMsg, result);
 }
 
 void OGLordRobotAI::RecoveryHandCards()
@@ -254,11 +251,6 @@ bool OGLordRobotAI::RbtInTakeOutCard( int argSeat, std::vector<int> argCards)
 		curHand = hand;
 		curHandSeat = argSeat;
 	}
-
-	for (int i=0; i<3; ++i)
-	{
-		printPoints(playerInfo[i].points, '\n');
-	}
 	return true;
 }
 
@@ -296,14 +288,8 @@ bool OGLordRobotAI::RbtOutGetTakeOutCard(std::vector<int> &vecCards)
 	}
 
 	takeOutHand(hand, vecCards);
-	cout << "take out hand: ";
+	DEBUG("take out hand: ");
 	printHand(hand);
-	cout << endl;
-	for (unsigned i=0; i<vecCards.size(); ++i)
-	{
-		cout << vecCards[i] << " ";
-	}
-	cout << endl;
 
 	Hand checkHand;
 	int checkPoints[CARD_POINT_NUM];
@@ -327,12 +313,8 @@ bool OGLordRobotAI::RbtOutGetTakeOutCard(std::vector<int> &vecCards)
 		}
 	}
 
-	cout << "remain cards after takeout: ";
-	for (unsigned i=0; i<aiCardsVec.size(); ++i)
-	{
-		cout << aiCardsVec[i] << " ";
-	}
-	cout << endl;
+	DEBUG("remain cards after takeout: ");
+    printCardInfo(aiCardsVec);
 	return true;
 }
 

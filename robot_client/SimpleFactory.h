@@ -12,6 +12,7 @@ enum msgID {
     NOTIFY_SETLORD                  = 5058, // 地主确定
     NOTIFY_TAKEOUT                  = 5059, // 出牌
     NOTIFY_GAMEOVER                 = 5060, // 结束游戏
+    MSGID_DDZ_GAME_RESULT_NTF       = 2100, // 游戏结果
 
     MSGID_CALLSCORE_REQ             = 5001, // 叫分请求
     MSGID_CALLSCORE_ACK             = 5002, // 叫分请求结果

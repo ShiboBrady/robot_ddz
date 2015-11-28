@@ -1,6 +1,7 @@
 #include <iostream>
-
+#include <sstream>
 #include "AIUtils.h"
+#include "log.h"
 
 using namespace std;
 
@@ -1749,14 +1750,16 @@ void AIUtils::handToPointsArray( Hand &hand, int points[CARD_POINT_NUM] )
 
 void AIUtils::printPoints( int points[CARD_POINT_NUM], char endChar )
 {
+    stringstream sstream;
 	for (int i = 0; i < CARD_POINT_NUM; ++i)
 	{
 		for (int j = 0; j < points[i]; ++j)
 		{
-			cout << POINT_CHAR[i];
+			sstream << POINT_CHAR[i];
 		}
 	}
-	cout << endChar;
+	sstream << endChar;
+    DEBUG("card info: %s", sstream.str().c_str());
 }
 
 void AIUtils::printHand( Hand &hand )
@@ -1784,7 +1787,6 @@ void AIUtils::printCardInfo( vector<int>& vecContent )
     int points[CARD_POINT_NUM] = {0};
 	cardVecToPointArr(vecContent, points);
 	printPoints(points, ' ');
-    cout << endl;
 }
 
 int AIUtils::getHandCount( Hand &hand )

@@ -18,6 +18,7 @@ enum RobotStatus
     INITGAME,   //游戏初始化通过
     CANSINGUP,  //可以报名
     SIGNUPED,   //报名成功
+    GAMMING,    //正在游戏中
 };
 
 enum CardPoint

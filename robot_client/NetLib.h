@@ -28,7 +28,19 @@ public:
     static void init_game_time_cb(int fd, short events, void* arg);
     static void sign_up_cond_time_cb(int fd, short events, void* arg);
     static void sign_up_time_cb(int fd, short events, void* arg);
+    static void delay_send_msg_time_cb(int fd, short events, void* arg);
+
 private:
+
+    typedef struct MsgNode{
+        MsgNode(struct bufferevent* bev, const std::string& msg, int msgId, int robotId)
+            :bev_(bev), msg_(msg), msgId_(msgId), robotId_(robotId){}
+        struct bufferevent* bev_;
+        std::string msg_;
+        int msgId_;
+        int robotId_;
+    }*pMsgNode, msgNode;
+
     std::string ip_;
     int port_;
     int robotNum_;
@@ -41,6 +53,7 @@ private:
     int initGameTime_;
     int signUpCondTime_;
     int signUpTime_;
+    int delaySendMsgTime_;
 
     //libevent基础数据结构
     struct event_base* base;
@@ -70,6 +83,10 @@ private:
     //报名的定时器
     struct event ev_timer_sign_in;
     struct timeval timerEventSignIn;
+
+    //延时发送消息的定时器
+    struct event ev_timer_delay;
+    struct timeval timerEventDelay;
 
     void connect();
     bool Init();
