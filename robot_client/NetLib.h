@@ -39,6 +39,7 @@ private:
         std::string msg_;
         int msgId_;
         int robotId_;
+        struct event ev_timer_delay_;
     }*pMsgNode, msgNode;
 
     std::string ip_;
@@ -53,7 +54,8 @@ private:
     int initGameTime_;
     int signUpCondTime_;
     int signUpTime_;
-    int delaySendMsgTime_;
+    int delaySendActiveMsgTime_;
+    int delaySendPassiveMsgTime_;
 
     //libevent基础数据结构
     struct event_base* base;
@@ -84,9 +86,13 @@ private:
     struct event ev_timer_sign_in;
     struct timeval timerEventSignIn;
 
-    //延时发送消息的定时器
-    struct event ev_timer_delay;
-    struct timeval timerEventDelay;
+    //首次叫分和出牌时延时发送消息的定时器
+    //struct event ev_timer_delay_active_msg;
+    struct timeval timerEventDelayActiveMsg;
+
+    //收到叫分和出牌通知后延时发送消息的定时器
+    //struct event ev_timer_delay_passive_msg;
+    struct timeval timerEventDelayPassiveMsg;
 
     void connect();
     bool Init();

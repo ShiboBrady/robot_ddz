@@ -186,19 +186,22 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
             }
             string strSend = netlib->SerializeMsg(msgId, strRet);
 
+            pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobotId());
+            evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
             if (NOTIFY_DEALCARD == msgIdBak || NOTIFY_BASECARD == msgIdBak)
             {
-                //添加延时发送消息的定时器
-                pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobotId());
-                evtimer_set(&netlib->ev_timer_delay, delay_send_msg_time_cb, oneMsgNode);
-                event_add(&(netlib->ev_timer_delay), &(netlib->timerEventDelay));
-                DEBUG("Add a timer, will delay send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
+                //添加主动消息延时发送消息的定时器
+                event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayActiveMsg));
+                DEBUG("Add a timer, will delay send active message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
             }
             else
             {
-                //把消息发送给服务器端
-                bufferevent_write(bev, strSend.c_str(), strSend.length());
-                DEBUG("Send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
+                //添加被动消息延时发送消息的定时器
+                event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayPassiveMsg));
+                DEBUG("Add a timer, will delay send passive message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
+
+                //bufferevent_write(bev, strSend.c_str(), strSend.length());
+                //DEBUG("Send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
             }
         }
         dataLength = evbuffer_get_length(bufferevent_get_input(bev));
@@ -393,6 +396,8 @@ bool NetLib::Init()
     std::string strInitGameTime;
     std::string strSignUpCondTime;
     std::string strSignUpTime;
+    std::string strDelaySendActiveTime;
+    std::string strDelaySendPassiveTime;
 
     bool bResult = false;
     CConfAccess* confAccess = CConfAccess::GetConfInstance();
@@ -401,12 +406,14 @@ bool NetLib::Init()
     bResult = confAccess->GetValue("robot", "robotNum", strRobotNum, "1");
     bResult = confAccess->GetValue("robot", "IQLevel", strRobotIQLevel, "0");
     bResult = confAccess->GetValue("server", "ip", ip_, "127.0.0.1");
+    bResult = confAccess->GetValue("server", "port", strPort, "9999");
     bResult = confAccess->GetValue("timer", "heartBeat", strHeartBeatTime, "30");
     bResult = confAccess->GetValue("timer", "verify", strVerifyTime, "30");
     bResult = confAccess->GetValue("timer", "initGame", strInitGameTime, "30");
     bResult = confAccess->GetValue("timer", "signUpCond", strSignUpCondTime, "30");
     bResult = confAccess->GetValue("timer", "signUp", strSignUpTime, "30");
-    bResult = confAccess->GetValue("server", "port", strPort, "9999");
+    bResult = confAccess->GetValue("timer", "activeMsgDelay", strDelaySendActiveTime, "8");
+    bResult = confAccess->GetValue("timer", "passiveMsgDelay", strDelaySendPassiveTime, "5");
     if (bResult)
     {
         port_ = ::atoi(strPort.c_str());
@@ -419,6 +426,8 @@ bool NetLib::Init()
         initGameTime_ = ::atoi(strInitGameTime.c_str());
         signUpCondTime_ = ::atoi(strSignUpCondTime.c_str());
         signUpTime_ = ::atoi(strSignUpTime.c_str());
+        delaySendActiveMsgTime_ = ::atoi(strDelaySendActiveTime.c_str());
+        delaySendPassiveMsgTime_ = ::atoi(strDelaySendPassiveTime.c_str());
         DEBUG("Get configure successed.");
     }
     return bResult;
@@ -447,9 +456,13 @@ void NetLib::InitTimer()
     timerEventSignIn.tv_sec = signUpTime_;
     timerEventSignIn.tv_usec = 0;
 
-    //延时发送消息定时器初始化
-    timerEventDelay.tv_sec = 5;//先设为5s
-    timerEventDelay.tv_usec = 0;
+    //延时发送主动消息定时器初始化
+    timerEventDelayActiveMsg.tv_sec = delaySendActiveMsgTime_;
+    timerEventDelayActiveMsg.tv_usec = 0;
+
+    //延时发送被动消息定时器初始化
+    timerEventDelayPassiveMsg.tv_sec = delaySendPassiveMsgTime_;
+    timerEventDelayPassiveMsg.tv_usec = 0;
 
     //添加心跳协议定时器
     evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, this);
