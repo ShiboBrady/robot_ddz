@@ -27,7 +27,7 @@ CLog* CLog::Initialize(const string& strLogFile)
 
 CLog::CLog(const string& strLogFile)
 {
-    PropertyConfigurator::doConfigure(LOG4CPLUS_TEXT("./log4cplus.properties"));
+    PropertyConfigurator::doConfigure(LOG4CPLUS_TEXT(strLogFile));
     global_pLogger = Logger::getRoot();
 }
 

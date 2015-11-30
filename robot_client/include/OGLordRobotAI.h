@@ -2,23 +2,20 @@
 #define OGLordRobotAI_h__
 
 #pragma once
-#include "Robot.h"
-#include "AbstractProduct.h"
-#include "SimpleFactory.h"
-
 #include <vector>
 #include <map>
 #include <set>
 #include <algorithm>
 #include <numeric>
 #include <string>
-#include <iostream>
+#include "RobotConfig.h"
+using namespace robot;
 
 class OGLordRobotAI
 {
 public:
 	OGLordRobotAI( const int robotId, const int IQLevel );
-	~OGLordRobotAI(void);
+	~OGLordRobotAI(void){};
 
 	// 收到发牌消息
 	virtual bool RbtInInitCard( int argSeat,                        // 自己的座位号
@@ -92,12 +89,6 @@ public:
 	virtual bool RbtOutGetLastError( int &errorCode);           // 返回当前错误码
 
     //访问数据成员接口
-    virtual void SetStatus( RobotStatus status ) { _status = status; };
-    virtual RobotStatus GetStatus() { return _status; };
-
-    virtual void SetCost( int costId ) { _costId = costId; };
-    virtual int GetCost() { return _costId; };
-
     virtual void SetRobotId( int robotId ) { this->robotId = robotId; };
     virtual int GetRobotId() { return robotId; };
 
@@ -109,8 +100,6 @@ public:
 
     virtual void SetLordSeat( int lordSeat ) { this->lordSeat = lordSeat; };
     virtual int GetLordSeat() { return lordSeat; };
-
-    bool RobotProcess( int msgId, const std::string& msg, std::string& result );
 
     void RecoveryHandCards();
 private:
@@ -267,8 +256,6 @@ private:
 
     std::vector<int> vecLastTakeOutCards;//最后一次出牌纪录
 
-    int _costId;//报名比赛时的费用ID
-
     int robotId;//机器人id
 
 	int level;//机器人智能等级，目前有0、1
@@ -326,9 +313,5 @@ private:
 	std::vector<std::pair<int, Hand> > history;
 
 	int errCode;
-
-    SimpleFactory factory;
-
-    AbstractProduct* product;
 };
 #endif // OGLordRobotAI_h__

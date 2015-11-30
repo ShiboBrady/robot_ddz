@@ -5,51 +5,19 @@
 
 using namespace std;
 using namespace AIUtils;
+using namespace robot;
 
 OGLordRobotAI::OGLordRobotAI( const int robotId, const int IQLevel )
     :mustHighLevel(false),
-     _status(INIT),
-     _costId(0),
-     robotId(robotId),
-     level(IQLevel),
+     robotId(robotId),  //机器人id
+     level(IQLevel),    //机器人等级
      lordSeat(-1),     //地主位置
      aiSeat(-1),       //自己的位置
      curHandSeat(-1),  //当前出牌位置
      curCaller(-1),     //当前叫分的人
-     curScore(0),       //当前的叫分
-     factory(),
-     product(NULL)
-
+     curScore(0)       //当前的叫分
 {
     curHand.type = NOTHING;
-}
-
-OGLordRobotAI::~OGLordRobotAI(void)
-{
-}
-
-bool OGLordRobotAI::RobotProcess(int msgId, const string& msg, string& result)
-{
-    //处理消息
-    product = factory.createProduct(msgId);
-    if (NULL == product)
-    {
-        cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
-        return false;
-    }
-    YLYQ::Protocol::message::Message message;
-    if (!message.ParseFromString(msg))
-    {
-        cout << "Parse message pb error." << endl;
-        return false;
-    }
-    if (!message.has_body())
-    {
-        cout << "Doesn't has body info." << endl;
-        return false;
-    }
-    string bodyMsg = message.body();
-    return product->operation(*this, bodyMsg, result);
 }
 
 void OGLordRobotAI::RecoveryHandCards()
@@ -343,6 +311,7 @@ bool OGLordRobotAI::RbtResetData()
 	curHandSeat = -1;
 	callHistory.clear();
 	history.clear();
+    vecLastTakeOutCards.clear();
 	return true;
 }
 

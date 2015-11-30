@@ -9,16 +9,17 @@
 #include <vector>
 #include <map>
 #include <list>
-#include "OGLordRobotAI.h"
+#include "Robot.h"
 #include "confaccess.h"
 
 class NetLib
 {
 public:
     NetLib();
-    ~NetLib();
+    ~NetLib(){};
     void start();
-    std::string SerializeMsg( int msgId, const std::string& body );
+    void stop();
+    bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
     static void server_msg_cb(struct bufferevent* bev, void* arg);
     static void event_cb(struct bufferevent *bev, short event, void *arg);
     static void cmd_msg_cb(int fd, short events, void* arg);
@@ -56,10 +57,11 @@ private:
     int signUpTime_;
     int delaySendActiveMsgTime_;
     int delaySendPassiveMsgTime_;
+    int exitTime_;
 
     //libevent基础数据结构
     struct event_base* base;
-    std::map<struct bufferevent*, OGLordRobotAI> bevToRobot;
+    std::map<struct bufferevent*, Robot> bevToRobot;
     struct sockaddr_in server_addr;
 
     //心跳的定时器
@@ -94,6 +96,8 @@ private:
     //struct event ev_timer_delay_passive_msg;
     struct timeval timerEventDelayPassiveMsg;
 
+    //在收到退出信号时，这个时间以后退出程序
+    struct timeval timerEventExit;
     void connect();
     bool Init();
     void InitTimer();

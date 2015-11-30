@@ -10,10 +10,9 @@
 #include <string.h>
 #include <algorithm>
 #include <numeric>
-
-using namespace std;
 #include "Robot.h"
-
+using namespace std;
+using namespace robot;
 
 namespace AIUtils
 {
