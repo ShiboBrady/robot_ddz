@@ -295,7 +295,9 @@ bool OGLordRobotAI::RbtResetData()
 	leftoverCards.clear();
 	aiCardsVec.clear();
     memset((char*)&playerInfo, 0, sizeof(playerInfo));
-	int remainPoints[CARD_POINT_NUM];
+	fill(remainPoints, remainPoints + (CARD_POINT_NUM - 2), 4);
+    remainPoints[BLACK_JOKER] = 1;
+	remainPoints[RED_JOKER] = 1;
 	std::map<HandType, std::vector<Hand> > handsMap;
 	memset((char*)&summary, 0, sizeof(summary));
 	uniHighHandCount.clear();
@@ -333,21 +335,29 @@ bool OGLordRobotAI::RbtInSetCard(std::vector<int> argInitCard, std::vector<int> 
 		if (i == aiSeat)
 		{
 			cardVecToPointArr(argInitCard, cards.points);
+            for (int i = 0; i < argInitCard.size(); ++i)
+            {
+                ++cards.total;
+            }
 		}
 		else
 		{
 			fill(cards.points, cards.points + CARD_POINT_NUM, -1);
 		}
-		if (i == lordSeat)
-		{
-			cards.total = 20;
-		}
-		else
-		{
-			cards.total = 17;
-		}
 	}
 	leftoverCards = argReceiveCard;
+    CardsInfo &cards = playerInfo[lordSeat];
+    for (int i=0; i<leftoverCards.size(); ++i)
+	{
+		if (lordSeat == aiSeat)
+		{
+			aiCardsVec.push_back(leftoverCards[i]);
+		}
+		if (lordSeat == aiSeat || cards.points[0] >= 0)
+		{
+			cards.points[cardToPoint(leftoverCards[i])]++;
+		}
+	}
 	return true;
 }
 

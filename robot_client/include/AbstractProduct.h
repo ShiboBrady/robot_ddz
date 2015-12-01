@@ -235,6 +235,18 @@ public:
     bool operation( Robot& myRobot, const string& msg, string& retMsg );
 };
 
+//获取断线续玩应答
+class GetKeepPlayInfo:public AbstractProduct{
+
+public:
+    GetKeepPlayInfo(){};
+    ~GetKeepPlayInfo(){};
+
+public:
+    bool operation( Robot& myRobot, const string& msg, string& retMsg );
+};
+
+
 /*++++++++++++++++++游戏阶段 结束++++++++++++++++++++++*/
 #endif
 

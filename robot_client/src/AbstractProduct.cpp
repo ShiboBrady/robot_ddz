@@ -8,6 +8,8 @@
 #include "message.pb.h"
 #include "log.h"
 #include "RobotConfig.h"
+#include "confaccess.h"
+#include "stringutil.h"
 
 using namespace robot;
 using namespace PBGameDDZ;
@@ -79,6 +81,9 @@ AbstractProduct* SimpleFactory::createProduct(int type){
         case robot::MSGID_DDZ_CANCEL_SIGN_UP_ACK:
             temp = new GetCancleSignUpResultInfo();
             break;
+        case robot::MSGID_KEEP_ACK:
+            temp = new GetKeepPlayInfo();
+            break;
         default:
             break;
     }
@@ -92,7 +97,13 @@ bool GetVerifyAckInfo::operation( Robot& myRobot, const string& msg, string& ser
     //    required int32 result = 1;
     //    optional string gameName = 2;       // 如果正在游戏中，返回游戏名称，客户端进行初始化，自动快速开始
     //}
+    INFO("===================GetVerifyAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (INIT != myRobot.GetStatus())
+    {
+        DEBUG("Robot %d doesn't in init status.", robot.GetRobotId());
+        return false;
+    }
     VerifyAck verifyAck;
     if (!verifyAck.ParseFromString(msg))
     {
@@ -103,12 +114,57 @@ bool GetVerifyAckInfo::operation( Robot& myRobot, const string& msg, string& ser
     if (message::SUCCESS == result)
     {
         //认证成功，开始初始化游戏
-        myRobot.SetStatus(VERIFIED);
-        DEBUG("Robot %d verify successed, result is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        if (verifyAck.has_gamename())
+        {
+            //有gamename字段，说明需要进行断线续玩操作.
+            string strName;
+            CConfAccess* confAccess = CConfAccess::GetConfInstance();
+            confAccess->GetValue("game", "name", strName, "org_ddz_match");
+            strName = StringUtil::Trim(strName);
+            string strGameName = verifyAck.gamename();
+
+            if (strName == strGameName)
+            {
+                //该机器人正在本场进行比赛，需要进行断线续玩
+                myRobot.SetStatus(KEEPPLAY);
+                INFO("Set robot %d to KEEPPLAY status.", robot.GetRobotId());
+
+                //发送断线续玩请求
+                //message KeepPlayingReq {
+                //    required int32 rev = 1;         // reserved
+                //}
+                KeepPlayingReq keepPlayingReq;
+                keepPlayingReq.set_rev(1);
+                if (!keepPlayingReq.SerializeToString(&serializedStr))
+                {
+                    ERROR("KeepPlayingReq serialize failed.");
+                    return false;
+                }
+
+                if (!keepPlayingReq.IsInitialized())
+                {
+                    ERROR("keepPlayingReq isn't a protobuf packet, length is: %d.", serializedStr.length());
+                    return false;
+                }
+                INFO("Robot %d will send a keepPlayingReq.", robot.GetRobotId());
+                return true;
+            }
+            else
+            {
+                //该机器人正在其它场进行比赛，不用
+                myRobot.SetStatus(OTHER);
+                INFO("Set robot %d to OTHER status.", robot.GetRobotId());
+            }
+        }
+        else
+        {
+            myRobot.SetStatus(VERIFIED);
+            INFO("Robot %d verify successed, status is: VERIFIED.", robot.GetRobotId());
+        }
     }
     else
     {
-        DEBUG("Robot %d verify failed, result is: %d.", robot.GetRobotId(), result);
+        ERROR("Robot %d verify failed, result is: %d.", robot.GetRobotId(), result);
     }
     return false;
 }
@@ -118,7 +174,13 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
     //message InitGameAck {
     //    required int32 result = 1;
     //}
+    INFO("===================GetInitGameAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (VERIFIED != myRobot.GetStatus())
+    {
+        DEBUG("Robot %d doesn't in verified status.", robot.GetRobotId());
+        return false;
+    }
     InitGameAck initGameAck;
     if (!initGameAck.ParseFromString(msg))
     {
@@ -130,7 +192,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
     {
         //初始化成功，开始查询报名条件
         myRobot.SetStatus(INITGAME);
-        DEBUG("Robot %d Game Init successed, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        INFO("Robot %d Game Init successed, robot status is: INITGAME.", robot.GetRobotId());
     }
     else
     {
@@ -160,7 +222,13 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
     //    optional int32 startSignUpTime = 6; // 开始报名时间, time_t
     //    optional int32 endSignUpTime = 7;   // 结束报名时间, time_t
     //}
+    INFO("===================GetSignUpCondAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (INITGAME != myRobot.GetStatus())
+    {
+        DEBUG("Robot %d doesn't in game init status.", robot.GetRobotId());
+        return false;
+    }
     OrgRoomDdzSignUpConditionAck orgRoomDdzSignUpConditionAck;
     if (!orgRoomDdzSignUpConditionAck.ParseFromString(msg))
     {
@@ -175,7 +243,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
     }
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
-        DEBUG("Robot %d can sign up for free.", robot.GetRobotId());
+        INFO("Robot %d can sign up for free, status is: CANSINGUP.", robot.GetRobotId());
         myRobot.SetCost(0);
         myRobot.SetStatus(CANSINGUP);
     }
@@ -184,7 +252,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
         bool cond = orgRoomDdzSignUpConditionAck.limit().enable();
         if (cond)
         {
-            DEBUG("Robot %d can sign up.", robot.GetRobotId());
+            INFO("Robot %d can sign up, status is: CANSINGUP.", robot.GetRobotId());
             myRobot.SetStatus(CANSINGUP);
             int costSize = orgRoomDdzSignUpConditionAck.costlist_size();
             int index = 0;
@@ -193,10 +261,10 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
                 if (orgRoomDdzSignUpConditionAck.costlist(index).enable())
                 {
                     myRobot.SetCost(orgRoomDdzSignUpConditionAck.costlist(index).id());
-                    DEBUG("Found enable cost in costlist, id is: %d.", myRobot.GetCost());
+                    INFO("Found enable cost in costlist, id is: %d.", myRobot.GetCost());
                     if (orgRoomDdzSignUpConditionAck.costlist(index).signed_())
                     {
-                        DEBUG("Robit %d has already sign up.", robot.GetRobotId());
+                        INFO("Robit %d has already sign up, status is: SIGNUPED.", robot.GetRobotId());
                         myRobot.SetStatus(SIGNUPED);
                     }
                     break;
@@ -226,7 +294,13 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     //    repeated CostGoods costList = 2;
     //    optional int32 userCount = 3;   // 已报名人数
     //}
+    INFO("===================GetSignUpAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (CANSINGUP != myRobot.GetStatus())
+    {
+        DEBUG("Robot %d doesn't in can sign up status.", robot.GetRobotId());
+        return false;
+    }
     OrgRoomDdzSignUpAck orgRoomDdzSignUpAck;
     if (!orgRoomDdzSignUpAck.ParseFromString(msg))
     {
@@ -238,13 +312,13 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     {
         //报名成功，开始等待游戏
         myRobot.SetStatus(SIGNUPED);
-        DEBUG("Robot %d sign up succssed, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        INFO("Robot %d sign up succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
     }
     else
     {
         if (508 == result)
         {
-            DEBUG("Robit %d has already sign up.", robot.GetRobotId());
+            INFO("Robit %d has already sign up.", robot.GetRobotId());
             myRobot.SetStatus(SIGNUPED);
         }
         else
@@ -263,6 +337,8 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
     //    required string gameName = 1;
     //    required bool isMatch    = 2;     // 是否为游戏场，true为是
     //}
+    INFO("===================GetEnterGameSceneInfo START=================");
+    OGLordRobotAI& robot = myRobot.GetRobot();
     GameSwitchSceneNtf gameSwitchSceneNtf;
     if (!gameSwitchSceneNtf.ParseFromString(msg))
     {
@@ -270,6 +346,8 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
         return false;
     }
     myRobot.SetStatus(GAMMING);
+    robot.RbtResetData();
+    INFO("Set robot %d to GAMMING status.", robot.GetRobotId());
     return false;
 }
 
@@ -282,8 +360,13 @@ bool GetGameStartInfo::operation( Robot& myRobot, const string& msg, string& ser
     //    repeated UserInfo userinfo  = 3;    // 用户信息
     //    optional MatchInfo matchInfo = 4;   // 如果是游戏场，该字段不用
     //}
+    INFO("===================GetGameStartInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     GameStartNtf gameStartNtf;
     if (!gameStartNtf.ParseFromString(msg))
     {
@@ -296,21 +379,21 @@ bool GetGameStartInfo::operation( Robot& myRobot, const string& msg, string& ser
     for (index = 0; index < iUserNum; ++index)//寻找自己的座位号:0-2
     {
         int netId = ::atoi(gameStartNtf.userinfo(index).username().c_str());
-        DEBUG("total userNum: %d, robot id: %d, net id: %d.", iUserNum, robotId, netId);
+        //DEBUG("total userNum: %d, robot id: %d, net id: %d.", iUserNum, robotId, netId);
         if (netId == robotId)
         {
             break;
-         }
+        }
     }
 
     if (iUserNum == index)
     {
-        DEBUG("Doesn't find robot name.");
+        ERROR("Doesn't find robot name.");
     }
     else
     {
         robot.SetAiSeat(index);
-        DEBUG("Set robot seat successed, seat is: %d.", index);
+        INFO("Set robot %d seat successed, seat is: %d.", robotId, index);
     }
     return false;
 }
@@ -323,8 +406,13 @@ bool InitHardCard::operation( Robot& myRobot, const string& msg, string& seriali
     //    required int32 headerseat = 1;          // 第一个叫分座位号
     //    repeated HandCardList cards = 2;        // 玩家手牌
     //}
+    INFO("===================InitHardCard START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     DealCardNtf dealCardNtf;
     if (!dealCardNtf.ParseFromString(msg))
     {
@@ -332,7 +420,7 @@ bool InitHardCard::operation( Robot& myRobot, const string& msg, string& seriali
         return false;
     }
     int aiSeat = robot.GetAiSeat();
-    DEBUG("my seat is: %d.", aiSeat);
+    //DEBUG("Robot %d's seat is: %d.", robot.GetRobotId(), aiSeat);
     if (-1 == aiSeat)
     {
         ERROR("Not init seat info.");
@@ -357,7 +445,7 @@ bool InitHardCard::operation( Robot& myRobot, const string& msg, string& seriali
         robot.RbtOutGetCallScore(myScore);
         CallScoreReq callScoreReq;
         callScoreReq.set_score(myScore);
-        DEBUG("hearderSeat is: %d, I'm is the first to call score, my score is: %d.", hearderSeat, myScore);
+        INFO("hearderSeat is: %d, I'm is the first to call score, my score is: %d.", hearderSeat, myScore);
         if (!callScoreReq.SerializeToString(&serializedStr))
         {
             ERROR("callScoreReq serialize failed.");
@@ -383,8 +471,13 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
     //    required int32 seatnext = 2[default=-1];    // 下一个叫分座位，-1叫分结束
     //    required int32 score = 3;                   // 叫分值(1/2/3), 0-不叫
     //}
+    INFO("===================GetCallScoreInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     UserCallScoreNtf userCallScoreNtf;
     if (!userCallScoreNtf.ParseFromString(msg))
     {
@@ -396,7 +489,7 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
     int score = userCallScoreNtf.score();
     int aiSeat = robot.GetAiSeat();
 
-    DEBUG("seatno: %d, seatnext: %d, score: %d, my seat: %d.", seatNo, seatNext, score, aiSeat);
+    //DEBUG("seatno: %d, seatnext: %d, score: %d, my seat: %d.", seatNo, seatNext, score, aiSeat);
     if (-1 == seatNext)
     {
         //停止叫分
@@ -406,6 +499,7 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
     {
         //没轮到自己，不叫
         robot.RbtInCallScore(seatNo, score);
+        return false;
     }
     else
     {
@@ -431,12 +525,13 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
         {
             //叫分
             callScoreReq.set_score(myScore);
-            DEBUG("Choose to call score, score is: %d.", myScore);
+            INFO("Robot %d choose to call score, score is: %d.", robot.GetRobotId(), myScore);
         }
 
         if (!callScoreReq.SerializeToString(&serializedStr))
         {
             ERROR("callScoreReq serialize failed.");
+            return false;
         }
         if (!callScoreReq.IsInitialized())
         {
@@ -445,7 +540,6 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
         }
         return true;
     }
-    return false;
 }
 
 //收到地主信息
@@ -455,8 +549,13 @@ bool GetLordInfo::operation( Robot& myRobot, const string& msg, string& serializ
     //    required int32 seatlord = 1;    // 地主座位号
     //    required int32 callscore = 2;   // 地主叫分
     //}
+    INFO("===================GetLordInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     LordSetNtf lordSetNtf;
     if (!lordSetNtf.ParseFromString(msg))
     {
@@ -465,7 +564,7 @@ bool GetLordInfo::operation( Robot& myRobot, const string& msg, string& serializ
     }
     int seatLord = lordSetNtf.seatlord();
     robot.SetLordSeat(seatLord);
-    DEBUG("Set lord info %d over.", seatLord);
+    INFO("Lord seat is %d.", seatLord);
     return false;
 }
 
@@ -475,8 +574,13 @@ bool GetBaseCardInfo::operation( Robot& myRobot, const string& msg, string& seri
     //message SendBaseCardNtf {
     //    repeated int32 basecards = 1;   // 底牌数据
     //}
+    INFO("===================GetBaseCardInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     SendBaseCardNtf sendBaseCardNtf;
     if (!sendBaseCardNtf.ParseFromString(msg))
     {
@@ -490,18 +594,16 @@ bool GetBaseCardInfo::operation( Robot& myRobot, const string& msg, string& seri
     {
         vecBaseCard.push_back(sendBaseCardNtf.basecards(index));
     }
-    DEBUG("Base card info:");
+    INFO("Base card info:");
     printCardInfo(vecBaseCard);
     robot.RbtInSetLord(seatLord, vecBaseCard);
-    DEBUG("Set base card over.");
 
     //判断自己是不是地主
     if (robot.GetLordSeat() == robot.GetAiSeat())
     {
-        DEBUG("I am lord, so it's my turn to take out first card.");
+        INFO("I am lord, so it's my turn to take out first card.");
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
-        DEBUG("My (lord) take out cards is:");
         printCardInfo(vecTackOutCard);
 
         TakeoutCardReq takeoutCardReq;
@@ -533,8 +635,13 @@ bool GetTakeOutCardInfo::operation( Robot& myRobot, const string& msg, string& s
     //    required int32 cardtype = 4;    // 类型
     //    required int32 multiple = 5;    // 当前倍数(炸弹产生的倍数)
     //}
+    INFO("===================GetTakeOutCardInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     TakeoutCardNtf takeoutCardNtf;
     if (!takeoutCardNtf.ParseFromString(msg))
     {
@@ -545,23 +652,21 @@ bool GetTakeOutCardInfo::operation( Robot& myRobot, const string& msg, string& s
     int seatnext = takeoutCardNtf.seatnext();
     int cardsNum = takeoutCardNtf.cards_size();
     int aiSeat = robot.GetAiSeat();
-    DEBUG("seatno: %d, seatnext: %d, cards num: %d, my seat: %d.", seatno, seatnext, cardsNum, aiSeat);
     vector<int> vecOppTackOutCard;
     for (int index = 0; index < cardsNum; ++index)
     {
         vecOppTackOutCard.push_back(takeoutCardNtf.cards(index));
     }
-    DEBUG("Current card info is:");
+    DEBUG("Current take out card info is:");
     printCardInfo(vecOppTackOutCard);
     robot.RbtInTakeOutCard(seatno, vecOppTackOutCard);
 
     if (seatnext == aiSeat)
     {
         //出牌
-        DEBUG("It's my turn to take out card.");
+        DEBUG("It's my turn to take out card, my take out cards is:");
         vector<int> vecTackOutCard;
         robot.RbtOutGetTakeOutCard(vecTackOutCard);
-        DEBUG("My take out cards is:");
         printCardInfo(vecTackOutCard);
 
         TakeoutCardReq takeoutCardReq;
@@ -574,24 +679,18 @@ bool GetTakeOutCardInfo::operation( Robot& myRobot, const string& msg, string& s
             ERROR("Take cout card req serialize failed!");
             return false;
         }
-        else
-        {
-            DEBUG("Take out cards over, serialized string size is: %d.", serializedStr.length());
-        }
+
         if (!takeoutCardReq.IsInitialized())
         {
             ERROR("takeoutCardReq isn't a protobuf packet, length is: %d.", serializedStr.length());
             return false;
         }
-        else
-        {
-            DEBUG("takeoutCardReq is a protobuf packet, length is: %d.", serializedStr.length());
-        }
+
         return true;
     }
     else
     {
-        DEBUG("It not my turn to take out card.");
+        INFO("It not my turn to take out card.");
     }
     return false;
 }
@@ -602,7 +701,13 @@ bool GetTrustInfo::operation( Robot& myRobot, const string& msg, string& seriali
     //message TrustNtf {
     //    required int32 seatno = 1;
     //}
+    INFO("===================GetTrustInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     TrustNtf trustNtf;
     if (!trustNtf.ParseFromString(msg))
     {
@@ -610,7 +715,6 @@ bool GetTrustInfo::operation( Robot& myRobot, const string& msg, string& seriali
         return false;
     }
     int seatNo = trustNtf.seatno();
-
     //判断是否是自己被进入托管
     int mySeatNo = robot.GetAiSeat();
     if (mySeatNo == seatNo)
@@ -634,7 +738,7 @@ bool GetTrustInfo::operation( Robot& myRobot, const string& msg, string& seriali
             ERROR("TrustLiftReq is not a legal protobuf packect.");
             return false;
         }
-        DEBUG("robot %d send a TrustLiftReq.", robot.GetRobotId());
+        INFO("robot %d send a TrustLiftReq.", robot.GetRobotId());
         return true;
     }
     return false;
@@ -646,7 +750,12 @@ bool GetGameOverInfo::operation( Robot& myRobot, const string& msg, string& seri
     //message GameOverNtf {
     //    required int32 reason = 1[default=2];   // 结束原因：1-强制结束，2-达到最大游戏盘数
     //}
+    INFO("===================GetGameOverInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (GAMMING != myRobot.GetStatus())
+    {
+        INFO("Robot %d doesn't in gamming status, will set it to game init status.", robot.GetRobotId());
+    }
     GameOverNtf gameOverNtf;
     if (!gameOverNtf.ParseFromString(msg))
     {
@@ -656,7 +765,7 @@ bool GetGameOverInfo::operation( Robot& myRobot, const string& msg, string& seri
     int reason = gameOverNtf.reason();
     robot.RbtResetData();
     myRobot.SetStatus(INITGAME);
-    DEBUG("Receved game over notify, reset robot to sign up condation.");
+    INFO("Receved game over notify, reset robot to sign up condation.");
     return false;
 }
 
@@ -682,7 +791,13 @@ bool GetGameResultInfo::operation( Robot& myRobot, const string& msg, string& se
     //    required int32 incExp = 10;         // 增加的经验值
     //    required int32 incVipPoints = 11;   // 增加的竞技点
     //}
+    INFO("===================GetGameResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (GAMMING != myRobot.GetStatus())
+    {
+        INFO("Robot %d doesn't in gamming status, and will set it to gamming status.", robot.GetRobotId());
+        myRobot.SetStatus(GAMMING);
+    }
     OrgRoomDdzGameResultNtf orgRoomDdzGameResultNtf;
     if (!orgRoomDdzGameResultNtf.ParseFromString(msg))
     {
@@ -690,7 +805,7 @@ bool GetGameResultInfo::operation( Robot& myRobot, const string& msg, string& se
         return false;
     }
     robot.RbtResetData();
-    DEBUG("Receved game result notify, robot waitting for next game.");
+    INFO("Receved game result notify, robot waitting for next game.");
     return false;
 }
 
@@ -707,11 +822,16 @@ bool GetCompetitionOverInfo::operation( Robot& myRobot, const string& msg, strin
     //    // 奖励的物品
     //    repeated rewardGoods rewardList = 4;
     //}
+    INFO("===================GetCompetitionOverInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (GAMMING != myRobot.GetStatus())
+    {
+        INFO("Robot %d doesn't in gamming status, and will set it to game init status.", robot.GetRobotId());
+    }
     OrgRoomDdzMatchOverNtf orgRoomDdzMatchOverNtf;
     robot.RbtResetData();
     myRobot.SetStatus(INITGAME);
-    DEBUG("Receved competition notify, reset robot to sign up condation.");
+    INFO("Receved competition notify, reset robot to sign up condation.");
     return false;
 }
 
@@ -720,8 +840,13 @@ bool GetCallScoreResultInfo::operation( Robot& myRobot, const string& msg, strin
     //message CallScoreAck {
     //    required int32 result = 1;
     //}
+    INFO("===================GetCallScoreResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     CallScoreAck callScoreAck;
     if (!callScoreAck.ParseFromString(msg))
     {
@@ -736,7 +861,7 @@ bool GetCallScoreResultInfo::operation( Robot& myRobot, const string& msg, strin
     }
     else
     {
-        DEBUG("Get call score result, call score successed.");
+        INFO("Get call score result, call score successed.");
     }
     return false;
 }
@@ -746,8 +871,13 @@ bool GetTakeOutCardResultInfo::operation( Robot& myRobot, const string& msg, str
     //message TakeoutCardAck {
     //    required int32 result = 1;
     //}
+    INFO("===================GetTakeOutCardResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
-    myRobot.SetStatus(GAMMING);
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     TakeoutCardAck takeoutCardAck;
     if (!takeoutCardAck.ParseFromString(msg))
     {
@@ -762,18 +892,24 @@ bool GetTakeOutCardResultInfo::operation( Robot& myRobot, const string& msg, str
     }
     else
     {
-        DEBUG("Get take out card result, take out card successed.");
+        INFO("Get take out card result, take out card successed.");
     }
     return false;
 }
 
-//获取出牌结果
+//获取解除托管结果
 bool GetTrustResultInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
     // 托管解除
     //message TrustLiftAck {
     //    required int32 result = 1;
     //}
+    INFO("===================GetTrustResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
     TrustLiftAck trustLiftAck;
     if (!trustLiftAck.ParseFromString(msg))
     {
@@ -783,7 +919,7 @@ bool GetTrustResultInfo::operation( Robot& myRobot, const string& msg, string& s
     int result = trustLiftAck.result();
     if (0 == result)
     {
-        DEBUG("robot %d requst cancle trust successed.", robot.GetRobotId());
+        INFO("robot %d requst cancle trust successed.", robot.GetRobotId());
     }
     else
     {
@@ -803,16 +939,17 @@ bool GetCancleSignUpResultInfo::operation( Robot& myRobot, const string& msg, st
     //    // 返还的物品
     //    repeated revertGoods revertList = 2;
     //}
+    INFO("===================GetCancleSignUpResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     OrgRoomDdzCancelSignUpAck orgRoomDdzCancelSignUpAck;
     if (!orgRoomDdzCancelSignUpAck.ParseFromString(msg))
     {
-        //
+        ERROR("parse pb message OrgRoomDdzCancelSignUpAck error.");
     }
     int result = orgRoomDdzCancelSignUpAck.result();
     if (0 == result)
     {
-        DEBUG("Robot %d cancle sign up successed.", robot.GetRobotId());
+        INFO("Robot %d cancle sign up successed.", robot.GetRobotId());
     }
     else
     {
@@ -820,5 +957,122 @@ bool GetCancleSignUpResultInfo::operation( Robot& myRobot, const string& msg, st
     }
     return false;
 }
+
+//获取断线续玩应答
+bool GetKeepPlayInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
+    // 断线续玩
+    //message KeepPlayingAck {
+    //    required int32 result = 1;
+    //    // 游戏实时信息
+    //    message GameInfo {
+    //        required int32 status = 1;      // 游戏当前状态
+    //        required int32 seatlord = 2;    // 地主的座位号
+    //        required int32 seatactive = 3;  // 当前活动玩家座位号
+    //        required int32 multiple = 4;    // 当前倍数, 基本倍数, 如果有踢的需要各自累加倍数
+    //        required int32 maxcallscore = 5;// 当前最大叫分
+    //        repeated int32 basecards = 6;   // 底牌数据
+    //    }
+
+    //    // 玩家动态信息
+    //    message PlayerInfo {
+    //        required bool trust = 1;          // 托管状态
+    //        required int32 trustsurplus = 2;  // 解除托管剩余次数
+    //        required int32 callscore = 3;     // 叫分值
+    //        repeated int32 cards = 4;         // 手牌内容
+    //        repeated int32 lastcards = 5;     // 最后一手牌
+    //        required UserInfo detailinfo = 6; // 用户详细信息
+    //    }
+
+    //    required GameInfo gameinfo = 2;     // 游戏信息
+    //    repeated PlayerInfo playerinfo = 3; // 玩家信息
+    //    required int32 ready = 4;           // 准备超时时间
+    //    required int32 callscore = 5;       // 叫分超时时间
+    //    required int32 takeout = 6;         // 出牌超时时间
+    //    required int32 settle = 7;          // 结算框显示时间（超时后自动准备）
+    //    required string gameChannel = 8;    // 游戏服务通道号
+    //    required int32 basicScore   = 9;    // 底分
+    //    optional MatchInfo matchInfo = 10;  // 如果是游戏场，该字段不用
+    //}
+    INFO("===================GetKeepPlayInfo START=================");
+    OGLordRobotAI& robot = myRobot.GetRobot();
+    if (KEEPPLAY != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in keep play status.", robot.GetRobotId());
+        return false;
+    }
+    KeepPlayingAck keepPlayingAck;
+    keepPlayingAck.ParseFromString(msg);
+    int result = keepPlayingAck.result();
+    if (0 != result)
+    {
+        ERROR("Get keep play req failed, reslut code is: %d.", result);
+        myRobot.SetStatus(INIT);
+        return false;
+    }
+    int index = 0;
+    int robotId = robot.GetRobotId();
+    int iPlayerInfoSize = keepPlayingAck.playerinfo_size();
+    for (index = 0; index < iPlayerInfoSize; ++index)
+    {
+        int iNetId = ::atoi(keepPlayingAck.playerinfo(index).detailinfo().username().c_str());
+        INFO("total userNum: %d, robot id: %d, net id: %d.", iPlayerInfoSize, robotId, iNetId);
+        if (iNetId == robotId)
+        {
+            break;
+        }
+    }
+    if (iPlayerInfoSize == index)
+    {
+        ERROR("Doesn't find robot name.");
+        return false;
+    }
+    else
+    {
+        robot.SetAiSeat(index);
+        INFO("Set robot seat successed, seat is: %d.", index);
+    }
+    int iAiSeat = robot.GetAiSeat();
+    int iLordSeat = keepPlayingAck.gameinfo().seatlord();
+    vector<int> vecHandCards;
+    vector<int> vecBaseCards;
+    int iBaseCardsSize = keepPlayingAck.gameinfo().basecards_size();
+    for (index = 0; index < iBaseCardsSize; ++index)
+    {
+        vecBaseCards.push_back(keepPlayingAck.gameinfo().basecards(index));
+    }
+    INFO("Robot %d current base cards is:");
+    printCardInfo(vecBaseCards);
+
+    int iHandsCardsSize = keepPlayingAck.playerinfo(iAiSeat).cards_size();
+    for (index = 0; index < iHandsCardsSize; ++index)
+    {
+        vecHandCards.push_back(keepPlayingAck.playerinfo(iAiSeat).cards(index));
+    }
+    INFO("Robot %d current hands cards is:");
+    printCardInfo(vecHandCards);
+
+    //注意先后顺序
+    robot.RbtResetData();//重置
+    robot.RbtInSetSeat(iAiSeat, iLordSeat);//设置座位信息
+    robot.RbtInSetCard(vecHandCards, vecBaseCards);//设置手牌信息
+    myRobot.SetStatus(GAMMING);
+
+    //处于托管状态，需发送取消托管请求
+    TrustLiftReq trustLiftReq;
+    trustLiftReq.set_rev(1);
+    if (!trustLiftReq.SerializeToString(&serializedStr))
+    {
+        ERROR("TrustLiftReq serialize failed!");
+        return false;
+    }
+    if (!trustLiftReq.IsInitialized())
+    {
+        ERROR("TrustLiftReq is not a legal protobuf packect.");
+        return false;
+    }
+    INFO("robot %d send a TrustLiftReq.", robot.GetRobotId());
+    return true;
+}
+
 /*++++++++++++++++++游戏阶段 结束++++++++++++++++++++++*/
 

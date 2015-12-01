@@ -22,6 +22,8 @@ enum RobotStatus
     SIGNUPED,   //报名成功
     GAMMING,    //正在游戏中
     EXITTING,   //正在退出游戏
+    KEEPPLAY,   //准备断线续玩
+    OTHER,      //闲置状态
 };
 
 //消息种类定义
@@ -61,6 +63,9 @@ enum msgID {
 
     MSGID_DDZ_CANCEL_SIGN_UP_REQ    = 2015, //取消报名请求
     MSGID_DDZ_CANCEL_SIGN_UP_ACK    = 2016, //取消报名请求应答
+
+    MSGID_KEEP_REQ                  = 5009, // 断线续玩
+    MSGID_KEEP_ACK                  = 5010, // 断线续玩应答
 
     MSGID_HEARTBEAT_NTF             = 10,   //心跳消息
 };

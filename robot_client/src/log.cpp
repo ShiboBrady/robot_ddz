@@ -68,6 +68,18 @@ void log::DEBUG_LOG(const std::string& strFile, int iLine, const char* format, .
     va_end(st);
 }
 
+void log::INFO_LOG(const std::string& strFile, int iLine, const char* format, ...)
+{
+    char logInfo[MAX_LINE];
+    va_list st;
+    va_start(st, format);
+    vsnprintf(logInfo, MAX_LINE, format, st);
+    stringstream ssLogData;
+    ssLogData << "[" << strFile << ":" << iLine << "] " << logInfo;
+    LOG4CPLUS_INFO(global_pLogger, ssLogData.str());
+    va_end(st);
+}
+
 void log::ERROR_LOG(const std::string& strFile, int iLine, const char* format, ...)
 {
     char logInfo[MAX_LINE];

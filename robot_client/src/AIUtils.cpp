@@ -1759,7 +1759,7 @@ void AIUtils::printPoints( int points[CARD_POINT_NUM], char endChar )
 		}
 	}
 	sstream << endChar;
-    DEBUG("card info: %s", sstream.str().c_str());
+    INFO("card info: %s", sstream.str().c_str());
 }
 
 void AIUtils::printHand( Hand &hand )

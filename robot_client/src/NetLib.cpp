@@ -62,7 +62,7 @@ void NetLib::connect()
         }
         else
         {
-            DEBUG("Robot Id range is bigger than robot num.");
+            WARN("Robot Id range is bigger than robot num.");
             break;
         }
     }
@@ -123,9 +123,6 @@ bool NetLib::SerializeMsg( int msgId, const string& body, string& strRet )
     }
 
     int msgLen = int(serializedStr.length());
-
-    //cout << "Before trans to net byte order: msg length: " << msgLen << endl;
-    //cout << "msgId: " << msgId << endl;
     msgLen = htonl(msgLen);
     msgId = htonl(msgId);
 
@@ -217,9 +214,13 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
             {
                 msgId = MSGID_TAKEOUT_REQ;
             }
-            else if (NOTIFY_TRUST == msgId)
+            else if (NOTIFY_TRUST == msgId || MSGID_KEEP_ACK == msgId)
             {
                 msgId = MSGID_TRUST_CANCEL_REQ;
+            }
+            else if (robot::MSGID_VERIFY_ACK == msgId)
+            {
+                msgId = robot::MSGID_KEEP_REQ;
             }
             string strSend;
             result = netlib->SerializeMsg(msgId, strRet, strSend);
@@ -229,22 +230,27 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
             }
             else
             {
-                pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobot().GetRobotId());
-                evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
                 if (NOTIFY_DEALCARD == msgIdBak || NOTIFY_BASECARD == msgIdBak)
                 {
                     //添加主动消息延时发送消息的定时器
+                    pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobot().GetRobotId());
+                    evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
                     event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayActiveMsg));
                     DEBUG("Add a timer, will delay send active message: %d to server for robot %d.", msgId, (it->second).GetRobot().GetRobotId());
                 }
-                else
+                else if (NOTIFY_CALLSCORE == msgIdBak || NOTIFY_TAKEOUT == msgIdBak)
                 {
                     //添加被动消息延时发送消息的定时器
+                    pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobot().GetRobotId());
+                    evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
                     event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayPassiveMsg));
                     DEBUG("Add a timer, will delay send passive message: %d to server for robot %d.", msgId, (it->second).GetRobot().GetRobotId());
-
-                    //bufferevent_write(bev, strSend.c_str(), strSend.length());
-                    //DEBUG("Send message: %d to server for robot %d.", msgId, (it->second).GetRobotId());
+                }
+                else
+                {
+                    //无需延迟，直接发送
+                    int iSendResult = bufferevent_write(bev, strSend.c_str(), strSend.length());
+                    DEBUG("Send immediate message: %d to server for robot %d, send result: %d.", msgId, (it->second).GetRobot().GetRobotId(), iSendResult);
                 }
             }
         }
@@ -400,9 +406,12 @@ void NetLib::sign_up_time_cb(int fd, short events, void* arg)
 void NetLib::delay_send_msg_time_cb(int fd, short events, void* arg)
 {
     pMsgNode oneMsgNode = static_cast<pMsgNode>(arg);
-    int iSendResult = bufferevent_write(oneMsgNode->bev_, (oneMsgNode->msg_).c_str(), (oneMsgNode->msg_).length());
-    DEBUG("Send delay message: %d to server for robot %d, write %d size, send result is %d.", \
-        oneMsgNode->msgId_, oneMsgNode->robotId_, (oneMsgNode->msg_).length(), iSendResult);
+    if (NULL != oneMsgNode->bev_)
+    {
+        int iSendResult = bufferevent_write(oneMsgNode->bev_, (oneMsgNode->msg_).c_str(), (oneMsgNode->msg_).length());
+        DEBUG("Send delay message: %d to server for robot %d, write %d size, send result is %d.", \
+            oneMsgNode->msgId_, oneMsgNode->robotId_, (oneMsgNode->msg_).length(), iSendResult);
+    }
     delete oneMsgNode;
 }
 
@@ -425,12 +434,41 @@ void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
 
     //查找消息对应的机器人
     map<struct bufferevent*, Robot>::iterator it = (netlib->bevToRobot).find(bev);
+    int robotId;
+    bool exist = false;
+    Robot robot = it->second;
     if ((netlib->bevToRobot).end() != it)
     {
+        exist = true;
+        robotId = it->second.GetRobot().GetRobotId();
+
         //这将自动close套接字和free读写缓冲区
         bufferevent_free(bev);
         DEBUG("Robot %d disconnected.", (it->second).GetRobot().GetRobotId());
+        bev = NULL;
         (netlib->bevToRobot).erase(it);
+    }
+
+    if (!exist)
+    {
+        //没有机器人断开连接
+        return;
+    }
+
+    //尝试断线续连
+    pair< std::map<struct bufferevent*, Robot>::iterator, bool> insertResult;
+    insertResult = (netlib->bevToRobot).insert(make_pair(bufferevent_socket_new(netlib->base, -1, BEV_OPT_CLOSE_ON_FREE), robot));
+    if (!insertResult.second)
+    {
+        //插入失败
+        ERROR("Insert into bevToRobot for robot %d failed.", robotId);
+    }
+    else
+    {
+        bufferevent_socket_connect((insertResult.first)->first, (struct sockaddr *)&(netlib->server_addr), sizeof(netlib->server_addr));
+        bufferevent_setcb((insertResult.first)->first, server_msg_cb, NULL, event_cb, arg);
+        bufferevent_enable((insertResult.first)->first, EV_READ | EV_WRITE);
+        DEBUG("Create connection for robot %d again", robot.GetRobot().GetRobotId());
     }
 }
 

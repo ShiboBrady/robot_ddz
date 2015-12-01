@@ -24,6 +24,8 @@ bool Robot::RobotProcess(int msgId, const string& msg, string& result)
         return false;
     }
     string bodyMsg = message.body();
-    return product_->operation(*this, bodyMsg, result);
+    bool ret =  product_->operation(*this, bodyMsg, result);
+    delete product_;
+    return ret;
 }
 
