@@ -155,5 +155,8 @@ void printHandsMap(std::map<HandType, std::vector<Hand> > &handsMap);
 
 void printCardInfo( std::vector<int>& vecContent );
 
+bool IsSameCardsInfo( const std::vector<int>& vecCards1, const std::vector<int>& vecCards2 );
+
+
 }
 #endif // AIUtils_h__

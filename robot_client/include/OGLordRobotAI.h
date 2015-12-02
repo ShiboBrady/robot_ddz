@@ -102,6 +102,10 @@ public:
     virtual int GetLordSeat() { return lordSeat; };
 
     void RecoveryHandCards();
+
+    bool IsLastTakeOutCards( std::vector<int>& vecCurrentCards );
+
+    void RemoveExtraCards( std::vector<int>& vecCurrentCards );
 private:
 
 	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家

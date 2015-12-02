@@ -9,18 +9,18 @@ bool Robot::RobotProcess(int msgId, const string& msg, string& result)
     product_ = factory_.createProduct(msgId);
     if (NULL == product_)
     {
-        cout << "Doesn't need to process this kind of message. msgId: " << msgId << endl;
+        DEBUG("Doesn't need to process this kind of message. msgId: %d", msgId);
         return false;
     }
     YLYQ::Protocol::message::Message message;
     if (!message.ParseFromString(msg))
     {
-        cout << "Parse message pb error." << endl;
+        ERROR("Parse message pb error.");
         return false;
     }
     if (!message.has_body())
     {
-        cout << "Doesn't has body info." << endl;
+        DEBUG("Doesn't has body info.");
         return false;
     }
     string bodyMsg = message.body();

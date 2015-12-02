@@ -1789,6 +1789,26 @@ void AIUtils::printCardInfo( vector<int>& vecContent )
 	printPoints(points, ' ');
 }
 
+bool AIUtils::IsSameCardsInfo( const vector<int>& vecCards1, const vector<int>& vecCards2 )
+{
+    if (vecCards1.size() != vecCards2.size())
+    {
+        return false;
+    }
+    vector<int> vec1 = vecCards1;
+    vector<int> vec2 = vecCards2;
+    sort(vec1.begin(), vec1.end());
+    sort(vec2.begin(), vec2.end());
+    for (int index = 0; index != vec1.size(); ++index)
+    {
+        if (vec1[index] != vec2[index])
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 int AIUtils::getHandCount( Hand &hand )
 {
 	int ret = 0;

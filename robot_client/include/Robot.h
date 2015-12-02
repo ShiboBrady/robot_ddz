@@ -8,6 +8,7 @@ class Robot
 public:
     Robot( const int robotId, const int IQLevel )
         :robot_(robotId, IQLevel),
+         needKeepPlay_(false),
          status_(robot::INIT),
          factory_(){};
     ~Robot(){};
@@ -18,11 +19,15 @@ public:
     robot::RobotStatus GetStatus() { return status_; };
 
     void SetCost( int costId ) { costId_ = costId; };
-    int GetCost() { return costId_; };
+    bool GetCost() { return costId_; };
+
+    void SetNeedKeepPlay( bool needKeepPlay ) { needKeepPlay_ = needKeepPlay; };
+    bool GetNeedKeepPlay() { return needKeepPlay_; };
 private:
     OGLordRobotAI robot_;
     robot::RobotStatus status_;
     int costId_;    //报名比赛时的费用ID
+    bool needKeepPlay_;    //是否需要短线续玩
     SimpleFactory factory_;
     AbstractProduct* product_;
 };

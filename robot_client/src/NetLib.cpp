@@ -218,7 +218,7 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
             {
                 msgId = MSGID_TRUST_CANCEL_REQ;
             }
-            else if (robot::MSGID_VERIFY_ACK == msgId)
+            else if (robot::MSGID_INIT_GAME_ACK == msgId)
             {
                 msgId = robot::MSGID_KEEP_REQ;
             }
@@ -434,42 +434,42 @@ void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
 
     //查找消息对应的机器人
     map<struct bufferevent*, Robot>::iterator it = (netlib->bevToRobot).find(bev);
-    int robotId;
-    bool exist = false;
-    Robot robot = it->second;
+    //int robotId;
+    //bool exist = false;
+    //Robot robot = it->second;
     if ((netlib->bevToRobot).end() != it)
     {
-        exist = true;
-        robotId = it->second.GetRobot().GetRobotId();
+        //exist = true;
+        //robotId = it->second.GetRobot().GetRobotId();
 
         //这将自动close套接字和free读写缓冲区
         bufferevent_free(bev);
-        DEBUG("Robot %d disconnected.", (it->second).GetRobot().GetRobotId());
+        ERROR("Robot %d disconnected.", (it->second).GetRobot().GetRobotId());
         bev = NULL;
         (netlib->bevToRobot).erase(it);
     }
 
-    if (!exist)
-    {
-        //没有机器人断开连接
-        return;
-    }
+    //if (!exist)
+    //{
+    //    //没有机器人断开连接
+    //    return;
+    //}
 
     //尝试断线续连
-    pair< std::map<struct bufferevent*, Robot>::iterator, bool> insertResult;
-    insertResult = (netlib->bevToRobot).insert(make_pair(bufferevent_socket_new(netlib->base, -1, BEV_OPT_CLOSE_ON_FREE), robot));
-    if (!insertResult.second)
-    {
-        //插入失败
-        ERROR("Insert into bevToRobot for robot %d failed.", robotId);
-    }
-    else
-    {
-        bufferevent_socket_connect((insertResult.first)->first, (struct sockaddr *)&(netlib->server_addr), sizeof(netlib->server_addr));
-        bufferevent_setcb((insertResult.first)->first, server_msg_cb, NULL, event_cb, arg);
-        bufferevent_enable((insertResult.first)->first, EV_READ | EV_WRITE);
-        DEBUG("Create connection for robot %d again", robot.GetRobot().GetRobotId());
-    }
+    //pair< std::map<struct bufferevent*, Robot>::iterator, bool> insertResult;
+    //insertResult = (netlib->bevToRobot).insert(make_pair(bufferevent_socket_new(netlib->base, -1, BEV_OPT_CLOSE_ON_FREE), robot));
+    //if (!insertResult.second)
+    //{
+    //    //插入失败
+    //    ERROR("Insert into bevToRobot for robot %d failed.", robotId);
+    //}
+    //else
+    //{
+    //    bufferevent_socket_connect((insertResult.first)->first, (struct sockaddr *)&(netlib->server_addr), sizeof(netlib->server_addr));
+    //    bufferevent_setcb((insertResult.first)->first, server_msg_cb, NULL, event_cb, arg);
+    //    bufferevent_enable((insertResult.first)->first, EV_READ | EV_WRITE);
+    //    DEBUG("Create connection for robot %d again", robot.GetRobot().GetRobotId());
+    //}
 }
 
 bool NetLib::Init()

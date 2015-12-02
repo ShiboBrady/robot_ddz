@@ -28,6 +28,24 @@ void OGLordRobotAI::RecoveryHandCards()
     }
 }
 
+bool OGLordRobotAI::IsLastTakeOutCards(vector<int>& vecCurrentCards)
+{
+    return IsSameCardsInfo(vecLastTakeOutCards, vecCurrentCards);
+}
+
+void OGLordRobotAI::RemoveExtraCards(vector<int>& vecCurrentCards)
+{
+    vector<int>::iterator findResult;
+    for (vector<int>::iterator it = vecCurrentCards.begin(); it != vecCurrentCards.end(); ++it)
+    {
+        findResult = find(aiCardsVec.begin(), aiCardsVec.end(), *it);
+        if (findResult != aiCardsVec.end())
+        {
+            aiCardsVec.erase(findResult);
+            INFO("Removed card :%c", POINT_CHAR[cardToPoint(*it)]);
+        }
+    }
+}
 bool OGLordRobotAI::RbtInInitCard(int argSeat, std::vector<int> argHandCard)
 {
 	aiSeat = argSeat;
@@ -329,6 +347,7 @@ bool OGLordRobotAI::RbtInSetSeat( int argMySeat, int argLordSeat)
 
 bool OGLordRobotAI::RbtInSetCard(std::vector<int> argInitCard, std::vector<int> argReceiveCard )
 {
+    aiCardsVec = argInitCard;
 	for (int i=0; i<PLAYER_NUM; ++i)
 	{
 		CardsInfo &cards = playerInfo[i];
@@ -345,19 +364,9 @@ bool OGLordRobotAI::RbtInSetCard(std::vector<int> argInitCard, std::vector<int> 
 			fill(cards.points, cards.points + CARD_POINT_NUM, -1);
 		}
 	}
-	leftoverCards = argReceiveCard;
-    CardsInfo &cards = playerInfo[lordSeat];
-    for (int i=0; i<leftoverCards.size(); ++i)
-	{
-		if (lordSeat == aiSeat)
-		{
-			aiCardsVec.push_back(leftoverCards[i]);
-		}
-		if (lordSeat == aiSeat || cards.points[0] >= 0)
-		{
-			cards.points[cardToPoint(leftoverCards[i])]++;
-		}
-	}
+    INFO("After recovery, total has %d hand cards.", playerInfo[aiSeat].total);
+    printCardInfo(aiCardsVec);
+    sortHandMap();
 	return true;
 }
 
