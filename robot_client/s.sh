@@ -14,8 +14,8 @@ function start()
 		echo "${binfile} not exist."
 		exit 0;
 	fi
-
-    if [ `echo $LD_LIBRARY_PATH | grep '/usr/local/lib'` == "" ];then
+	echo $LD_LIBRARY_PATH | grep -q '/usr/local/lib'
+    if [ $? -eq 1 ];then
     	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
     	echo "export /usr/local/lib path."
 	else

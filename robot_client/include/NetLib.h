@@ -19,6 +19,9 @@ public:
     ~NetLib(){};
     void start();
     void stop();
+    void ChangeStatusForSignUp(int robotNum);
+    void SendSignUpCondReq(struct bufferevent* bev, Robot& robot);
+    void SendSignUpReq(struct bufferevent* bev, Robot& robot);
     bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
     static void server_msg_cb(struct bufferevent* bev, void* arg);
     static void event_cb(struct bufferevent *bev, short event, void *arg);
@@ -30,6 +33,8 @@ public:
     static void sign_up_cond_time_cb(int fd, short events, void* arg);
     static void sign_up_time_cb(int fd, short events, void* arg);
     static void delay_send_msg_time_cb(int fd, short events, void* arg);
+    static void query_room_state_time_cb(int fd, short events, void* arg);
+    static void quick_game_time_cb(int fd, short events, void* arg);
 
 private:
 
@@ -58,19 +63,19 @@ private:
     int delaySendActiveMsgTime_;
     int delaySendPassiveMsgTime_;
     int exitTime_;
+    int quickGameTime_;
+    int isMatch_;
+    int roomStateTime_;
 
     //libevent基础数据结构
     struct event_base* base;
-    std::map<struct bufferevent*, Robot> bevToRobot;
+    std::map<struct bufferevent*, Robot> bevToRobot;   //负责出牌的机器人
+    std::map<struct bufferevent*, Robot> headerRobot;  //负责调度的机器人
     struct sockaddr_in server_addr;
 
     //心跳的定时器
     struct event ev_timer_heart_beat;
     struct timeval timerEventHeartBeat;
-
-    //初始化机器人的定时器
-    struct event ev_timer_init;
-    struct timeval timerEventInit;
 
     //验证身份的定时器
     struct event ev_timer_verify;
@@ -98,6 +103,15 @@ private:
 
     //在收到退出信号时，这个时间以后退出程序
     struct timeval timerEventExit;
+
+    //查询房间状态的定时器
+    struct event ev_timer_room_state;
+    struct timeval timerEventRoomState;
+
+    //快速比赛场定时器
+    struct event ev_timer_quick_game;
+    struct timeval timerEventQuickGame;
+
     void connect();
     bool Init();
     void InitTimer();

@@ -18,12 +18,14 @@ enum RobotStatus
     INIT = 0,   //刚初始化
     VERIFIED,   //验证通过
     INITGAME,   //游戏初始化通过
+    WAITSIGNUP, //等待报名(等待报名快速开始游戏)
     CANSINGUP,  //可以报名
-    SIGNUPED,   //报名成功
+    SIGNUPED,   //报名成功(等待快速开始游戏)
     GAMMING,    //正在游戏中
     EXITTING,   //正在退出游戏
     KEEPPLAY,   //准备断线续玩
     OTHER,      //闲置状态
+    HEADER,     //调度状态
 };
 
 //消息种类定义
@@ -66,6 +68,15 @@ enum msgID {
 
     MSGID_KEEP_REQ                  = 5009, // 断线续玩
     MSGID_KEEP_ACK                  = 5010, // 断线续玩应答
+
+    MSGID_DDZ_ROOM_STAT_REQ         = 2005, // 房间状态查询
+    MSGID_DDZ_ROOM_STAT_ACK         = 2006, // 房间状态应答
+
+    MSGID_READY_REQ                 = 5011, // 准备完毕
+    MSGID_READY_ACK                 = 5012, // 准备完毕应答
+
+    MSGID_DDZ_QUICK_START_REQ       = 2001, // 游戏场快速开始请求
+    MSGID_DDZ_QUICK_START_ACK       = 2002, // 游戏场快速开始应答
 
     MSGID_HEARTBEAT_NTF             = 10,   //心跳消息
 };

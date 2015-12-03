@@ -27,7 +27,7 @@ private:
     OGLordRobotAI robot_;
     robot::RobotStatus status_;
     int costId_;    //报名比赛时的费用ID
-    bool needKeepPlay_;    //是否需要短线续玩
+    bool needKeepPlay_;    //是否需要断线续玩
     SimpleFactory factory_;
     AbstractProduct* product_;
 };

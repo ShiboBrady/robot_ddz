@@ -57,6 +57,12 @@ AbstractProduct* SimpleFactory::createProduct(int type){
         case robot::MSGID_DDZ_MATCH_OVER_NTF:
             temp = new GetCompetitionOverInfo();
             break;
+        case robot::MSGID_DDZ_QUICK_START_ACK:
+            temp = new GetQuickGameAckInfo();
+            break;
+        case robot::MSGID_READY_ACK:
+            temp = new GetReadyResultInfo();
+            break;
         case robot::MSGID_CALLSCORE_ACK:
             temp = new GetCallScoreResultInfo();
             break;
@@ -83,6 +89,9 @@ AbstractProduct* SimpleFactory::createProduct(int type){
             break;
         case robot::MSGID_KEEP_ACK:
             temp = new GetKeepPlayInfo();
+            break;
+        case robot::MSGID_DDZ_ROOM_STAT_ACK:
+            temp = new GetRoomStateAckInfo();
             break;
         default:
             break;
@@ -153,7 +162,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
     int result = initGameAck.result();
     if (message::SUCCESS == result)
     {
-        //初始化成功，开始查询报名条件
+        //初始化成功，判断是断线续玩，还是选择等待。
         if (myRobot.GetNeedKeepPlay())
         {
             //需要进行断线续玩操作.
@@ -184,7 +193,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
         else
         {
             //不需要进行断线续玩操作
-            myRobot.SetStatus(INITGAME);
+            myRobot.SetStatus(WAITSIGNUP);
             INFO("Robot %d Game Init successed, robot status is: INITGAME.", robot.GetRobotId());
         }
     }
@@ -236,11 +245,19 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
         DEBUG("Robot %d sign up condition failed, result is: %d.", robot.GetRobotId(), result);
         return false;
     }
+    string strMatchId;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    confAccess->GetValue("game", "matchid", strMatchId, "1000");
+
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
         INFO("Robot %d can sign up for free, status is: CANSINGUP.", robot.GetRobotId());
-        myRobot.SetCost(0);
+        OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
+        orgRoomDdzSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
+        orgRoomDdzSignUpReq.set_costid(0);
+        orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
         myRobot.SetStatus(CANSINGUP);
+        return true;
     }
     else
     {
@@ -251,23 +268,36 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
             myRobot.SetStatus(CANSINGUP);
             int costSize = orgRoomDdzSignUpConditionAck.costlist_size();
             int index = 0;
+            int costId = 0;
             for (index = 0; index < costSize; ++index)
             {
                 if (orgRoomDdzSignUpConditionAck.costlist(index).enable())
                 {
                     myRobot.SetCost(orgRoomDdzSignUpConditionAck.costlist(index).id());
+                    costId = orgRoomDdzSignUpConditionAck.costlist(index).id();
                     INFO("Found enable cost in costlist, id is: %d.", myRobot.GetCost());
                     if (orgRoomDdzSignUpConditionAck.costlist(index).signed_())
                     {
                         INFO("Robit %d has already sign up, status is: SIGNUPED.", robot.GetRobotId());
                         myRobot.SetStatus(SIGNUPED);
+                        return false;
                     }
                     break;
                 }
             }
             if (costSize == index)
             {
-                ERROR("Doesn't found enable cost in costlist.");
+                ERROR("Doesn't found enable cost in costlist, Robot %d can't sign up.", robot.GetRobotId());
+            }
+            else
+            {
+                INFO("Robot %d send sign up request.", robot.GetRobotId());
+                OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
+                orgRoomDdzSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
+                orgRoomDdzSignUpReq.set_costid(costId);
+                orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
+                myRobot.SetStatus(CANSINGUP);
+                return true;
             }
         }
         else
@@ -325,6 +355,97 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     return false;
 }
 
+bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
+    //message OrgRoomDdzRoomStatAck {
+    //    required int32 result = 1;
+    //    message RoomStat {
+    //        required int32 roomId = 1;  // 比赛/比赛 ID
+    //        required int32 userCount = 2;// 人数
+    //    }
+    //    repeated RoomStat stat = 2;
+    //}
+    INFO("===================GetRoomStateAckInfo START=================");
+    OGLordRobotAI& robot = myRobot.GetRobot();
+    INFO("Message for robot %d.", robot.GetRobotId());
+    OrgRoomDdzRoomStatAck orgRoomDdzRoomStatAck;
+    if (!orgRoomDdzRoomStatAck.ParseFromString(msg))
+    {
+        ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
+        return false;
+    }
+    int result = orgRoomDdzRoomStatAck.result();
+    if (0 != result)
+    {
+        INFO("Request quick game failed, result is: %d.", result);
+        return false;
+    }
+    int iRoomSize = orgRoomDdzRoomStatAck.stat_size();//对于机器人，roomsize只会是1.
+    INFO("room size (it's only equal 1): %d.", iRoomSize)
+    int roomId = orgRoomDdzRoomStatAck.stat(0).roomid();
+    int userCount = orgRoomDdzRoomStatAck.stat(0).usercount();
+
+    //对于比赛场
+    string strMatchId;
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    confAccess->GetValue("game", "matchid", strMatchId, "1000");
+    int matchId = ::atoi(strMatchId.c_str());
+    if (roomId != matchId)
+    {
+        INFO("Room id %d is not mater with matchId %d", roomId, matchId);
+        return false;
+    }
+    if (userCount > 0)
+    {
+        //大于1个人时，需要机器人进入
+        string strMaxPlayerNum;
+        CConfAccess* confAccess = CConfAccess::GetConfInstance();
+        confAccess->GetValue("game", "playerNum", strMaxPlayerNum, "3");
+        int maxPlayerNum = ::atoi(strMaxPlayerNum.c_str());
+        int needRobotNum = maxPlayerNum - userCount;
+        INFO("Limit player num is: %d, current room user is: %d, need enter robot num is: %d.", \
+            maxPlayerNum, userCount, needRobotNum);
+        if (needRobotNum > 0)
+        {
+            serializedStr = StringUtil::Int2String(needRobotNum);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+}
+
+bool GetQuickGameAckInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
+    //message OrgRoomDdzQuickStartAck {
+    //    required int32 result = 1;
+    //}
+    INFO("===================GetQuickGameAckInfo START=================");
+    OGLordRobotAI& robot = myRobot.GetRobot();
+    INFO("Message for robot %d.", robot.GetRobotId());
+    OrgRoomDdzQuickStartAck orgRoomDdzQuickStartAck;
+    if (!orgRoomDdzQuickStartAck.ParseFromString(msg))
+    {
+        ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
+        return false;
+    }
+
+    int result = orgRoomDdzQuickStartAck.result();
+    if (0 != result)
+    {
+        ERROR("Quick game request failed, result is: %d.", result);
+        myRobot.SetStatus(WAITSIGNUP);
+        INFO("Robot %d request quick game failed, robot status is: WAITSIGNUP.", robot.GetRobotId(), myRobot.GetStatus());
+    }
+    else
+    {
+        INFO("Quick game request successed.");
+        myRobot.SetStatus(SIGNUPED);
+        INFO("Robot %d request quick game succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
+    }
+    return false;
+}
+
 /*++++++++++++++++++游戏阶段 开始++++++++++++++++++++++*/
 //进入游戏场景
 bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
@@ -342,10 +463,34 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
         ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
         return false;
     }
+    if (SIGNUPED != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in SIGNUPED status.", robot.GetRobotId());
+        return false;
+    }
     myRobot.SetStatus(GAMMING);
     robot.RbtResetData();
     INFO("Set robot %d to GAMMING status.", robot.GetRobotId());
-    return false;
+
+    //发送准备完毕请求
+    //message ReadyReq {
+    //    required int32 rev = 1;
+    //}
+    ReadyReq readyReq;
+    readyReq.set_rev(1001);
+    if (!readyReq.SerializeToString(&serializedStr))
+    {
+        ERROR("readyReq serialize failed.");
+        return false;
+    }
+
+    if (!readyReq.IsInitialized())
+    {
+        ERROR("readyReq isn't a protobuf packet, length is: %d.", serializedStr.length());
+        return false;
+    }
+
+    return true;
 }
 
 //游戏开始
@@ -778,7 +923,7 @@ bool GetGameOverInfo::operation( Robot& myRobot, const string& msg, string& seri
     }
     int reason = gameOverNtf.reason();
     robot.RbtResetData();
-    myRobot.SetStatus(INITGAME);
+    myRobot.SetStatus(WAITSIGNUP);
     INFO("Receved game over notify, reset robot to sign up condation.");
     return false;
 }
@@ -821,6 +966,15 @@ bool GetGameResultInfo::operation( Robot& myRobot, const string& msg, string& se
     }
     robot.RbtResetData();
     INFO("Receved game result notify, robot waitting for next game.");
+    CConfAccess* confAccess = CConfAccess::GetConfInstance();
+    std::string strIsMatch;
+    confAccess->GetValue("game", "isMatch", strIsMatch, "1");
+    int isMatch_ = ::atoi(strIsMatch.c_str());
+    if (0 == isMatch_)
+    {
+        INFO("Is game, set robot state WAITSIGNUP.");
+        myRobot.SetStatus(WAITSIGNUP);
+    }
     return false;
 }
 
@@ -846,8 +1000,38 @@ bool GetCompetitionOverInfo::operation( Robot& myRobot, const string& msg, strin
     }
     OrgRoomDdzMatchOverNtf orgRoomDdzMatchOverNtf;
     robot.RbtResetData();
-    myRobot.SetStatus(INITGAME);
+    myRobot.SetStatus(WAITSIGNUP);
     INFO("Receved competition notify, reset robot to sign up condation.");
+    return false;
+}
+
+bool GetReadyResultInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
+    //message ReadyAck {
+    //    required int32 result = 1;
+    //}
+    INFO("===================GetReadyResultInfo START=================");
+    OGLordRobotAI& robot = myRobot.GetRobot();
+    INFO("Message for robot %d.", robot.GetRobotId());
+    if (GAMMING != myRobot.GetStatus())
+    {
+        ERROR("Robot %d doesn't in gamming status.", robot.GetRobotId());
+        return false;
+    }
+    ReadyAck readyAck;
+    if (!readyAck.ParseFromString(msg))
+    {
+        ERROR("parse pb message ReadyAck error.");
+        return false;
+    }
+    int result = readyAck.result();
+    if (0 != result)
+    {
+        ERROR("Get ready req failed, result is: %d.", result);
+    }
+    else
+    {
+        INFO("Get ready req successed.");
+    }
     return false;
 }
 
@@ -1027,7 +1211,7 @@ bool GetKeepPlayInfo::operation( Robot& myRobot, const string& msg, string& seri
     if (0 != result)
     {
         ERROR("Get keep play req failed, reslut code is: %d.", result);
-        myRobot.SetStatus(INIT);
+        myRobot.SetStatus(GAMMING);//当前局会一直都出不了牌，下一局会就能正常了
         return false;
     }
     int index = 0;

@@ -67,6 +67,29 @@ public:
     bool operation( Robot& myRobot, const string& msg, string& retMsg );
 };
 
+//查询房间状态回应
+class GetRoomStateAckInfo:public AbstractProduct{
+
+public:
+    GetRoomStateAckInfo(){};
+    virtual ~GetRoomStateAckInfo(){};
+
+public:
+    bool operation( Robot& myRobot, const string& msg, string& retMsg );
+};
+
+//快速开始游戏请求回应
+class GetQuickGameAckInfo:public AbstractProduct{
+
+public:
+    GetQuickGameAckInfo(){};
+    virtual ~GetQuickGameAckInfo(){};
+
+public:
+    bool operation( Robot& myRobot, const string& msg, string& retMsg );
+};
+
+
 
 /*++++++++++++++++++游戏阶段 开始++++++++++++++++++++++*/
 //进入游戏场景
@@ -190,6 +213,18 @@ public:
 public:
     bool operation( Robot& myRobot, const string& msg, string& retMsg );
 };
+
+//获取准备完毕结果
+class GetReadyResultInfo:public AbstractProduct{
+
+public:
+    GetReadyResultInfo(){};
+    ~GetReadyResultInfo(){};
+
+public:
+    bool operation( Robot& myRobot, const string& msg, string& retMsg );
+};
+
 
 //获取叫分结果
 class GetCallScoreResultInfo:public AbstractProduct{
