@@ -27,7 +27,7 @@ void InitSignalHandle()
     sigaction(SIGKILL, &sa_usr, NULL);
 }
 
-void InitConfig(const char *confFile)
+void InitConfig(const char *confFile, const string& strProgramName)
 {
     if (NULL == confFile)
     {
@@ -35,17 +35,28 @@ void InitConfig(const char *confFile)
         ::exit(0);
     }
     CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->Load(confFile);
-    string strLogFile;
-    confAccess->GetValue("log", "logConf", strLogFile, "../configure/log4cplus.properties");
+    if (!confAccess->Load(confFile, strProgramName))
+    {
+        cout << "Load configure file failed." << endl;
+        ::exit(0);
+    }
+    string strLogFile = confAccess->GetLogConfFilePath();
     log::CLog::Initialize(strLogFile);
 }
 
 int main(int argc, char** argv)
 {
+    if (2 != argc)
+    {
+        cout << "usage: ./robot_client param." << endl;
+        return 0;
+    }
+    string strCmdParam = string(argv[1]);
+    cout << "Starting program " << strCmdParam << endl;
+
     InitSignalHandle();
     const char confFile[] = "../configure/robot.conf";
-    InitConfig(confFile);
+    InitConfig(confFile, strCmdParam);
     netLib = new NetLib;
     netLib->start();
     return 0;

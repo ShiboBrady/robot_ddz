@@ -8,7 +8,6 @@
 #include "message.pb.h"
 #include "log.h"
 #include "RobotConfig.h"
-#include "confaccess.h"
 #include "stringutil.h"
 
 using namespace robot;
@@ -245,15 +244,12 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
         DEBUG("Robot %d sign up condition failed, result is: %d.", robot.GetRobotId(), result);
         return false;
     }
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
 
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
         INFO("Robot %d can sign up for free, status is: CANSINGUP.", robot.GetRobotId());
         OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
-        orgRoomDdzSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
+        orgRoomDdzSignUpReq.set_matchid(confAccess->GetMatchId());
         orgRoomDdzSignUpReq.set_costid(0);
         orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
         myRobot.SetStatus(CANSINGUP);
@@ -293,7 +289,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
             {
                 INFO("Robot %d send sign up request.", robot.GetRobotId());
                 OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
-                orgRoomDdzSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
+                orgRoomDdzSignUpReq.set_matchid(confAccess->GetMatchId());
                 orgRoomDdzSignUpReq.set_costid(costId);
                 orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
                 myRobot.SetStatus(CANSINGUP);
@@ -383,35 +379,69 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     INFO("room size (it's only equal 1): %d.", iRoomSize)
     int roomId = orgRoomDdzRoomStatAck.stat(0).roomid();
     int userCount = orgRoomDdzRoomStatAck.stat(0).usercount();
-
-    //对于比赛场
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
-    int matchId = ::atoi(strMatchId.c_str());
+    int matchId = confAccess->GetMatchId();
+    bool isMatch_ = confAccess->GetIsMatch();
     if (roomId != matchId)
     {
         INFO("Room id %d is not mater with matchId %d", roomId, matchId);
         return false;
     }
+
     if (userCount > 0)
     {
-        //大于1个人时，需要机器人进入
-        string strMaxPlayerNum;
-        CConfAccess* confAccess = CConfAccess::GetConfInstance();
-        confAccess->GetValue("game", "playerNum", strMaxPlayerNum, "3");
-        int maxPlayerNum = ::atoi(strMaxPlayerNum.c_str());
-        int needRobotNum = maxPlayerNum - userCount;
-        INFO("Limit player num is: %d, current room user is: %d, need enter robot num is: %d.", \
-            maxPlayerNum, userCount, needRobotNum);
-        if (needRobotNum > 0)
+        if (isMatch_)
         {
-            serializedStr = StringUtil::Int2String(needRobotNum);
-            return true;
+            //比赛场，大于1个人时，需要机器人进入
+            int maxPlayerNum = confAccess->GetMaxPlayerNum();
+            int percentage = confAccess->GetPercentage();
+            int needRobotNum = 0;
+
+            //需要按照百分比选择机器人数
+            int need = maxPlayerNum - userCount;
+            needRobotNum = int(need * (percentage / 100.00) + 0.5);
+            if (1 == need && 0 == needRobotNum)
+            {
+                needRobotNum = 1;
+            }
+            INFO("Limit player num is: %d, current room user is: %d, need enter robot num is: %d.", \
+                maxPlayerNum, userCount, needRobotNum);
+            if (needRobotNum > 0)
+            {
+                serializedStr = StringUtil::Int2String(needRobotNum);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
         else
         {
-            return false;
+            //游戏场，大于1个人时，且人数不是3的整数倍时，需要机器人进入
+            INFO("For game, current room user is: %d.", userCount);
+            int remainder = userCount % 3;
+            int needRobotNum = 0;
+            switch (remainder)
+            {
+                case 1:
+                    needRobotNum = 2;
+                    break;
+                case 2:
+                    needRobotNum = 1;
+                    break;
+                default:
+                    break;
+            }
+            INFO("Current room user is: %d, need enter robot num is: %d.", userCount, needRobotNum);
+            if (needRobotNum)
+            {
+                serializedStr = StringUtil::Int2String(needRobotNum);
+                return true;
+            }
+            else
+            {
+                return false;
+            }
         }
     }
 }
@@ -433,15 +463,13 @@ bool GetQuickGameAckInfo::operation( Robot& myRobot, const string& msg, string& 
     int result = orgRoomDdzQuickStartAck.result();
     if (0 != result)
     {
-        ERROR("Quick game request failed, result is: %d.", result);
         myRobot.SetStatus(WAITSIGNUP);
-        INFO("Robot %d request quick game failed, robot status is: WAITSIGNUP.", robot.GetRobotId(), myRobot.GetStatus());
+        ERROR("Robot %d request quick game failed, result code is: %d, robot status is: WAITSIGNUP.", robot.GetRobotId(), result);
     }
     else
     {
-        INFO("Quick game request successed.");
-        myRobot.SetStatus(SIGNUPED);
-        INFO("Robot %d request quick game succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
+        myRobot.SetStatus(QUICKGAME);
+        INFO("Robot %d request quick game succssed, robot status is: QUICKGAME.", robot.GetRobotId());
     }
     return false;
 }
@@ -463,9 +491,9 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
         ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
         return false;
     }
-    if (SIGNUPED != myRobot.GetStatus())
+    if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in SIGNUPED status.", robot.GetRobotId());
+        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME status.", robot.GetRobotId());
         return false;
     }
     myRobot.SetStatus(GAMMING);
@@ -966,11 +994,7 @@ bool GetGameResultInfo::operation( Robot& myRobot, const string& msg, string& se
     }
     robot.RbtResetData();
     INFO("Receved game result notify, robot waitting for next game.");
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    std::string strIsMatch;
-    confAccess->GetValue("game", "isMatch", strIsMatch, "1");
-    int isMatch_ = ::atoi(strIsMatch.c_str());
-    if (0 == isMatch_)
+    if (!confAccess->GetIsMatch())
     {
         INFO("Is game, set robot state WAITSIGNUP.");
         myRobot.SetStatus(WAITSIGNUP);

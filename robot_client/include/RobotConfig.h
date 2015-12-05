@@ -20,7 +20,8 @@ enum RobotStatus
     INITGAME,   //游戏初始化通过
     WAITSIGNUP, //等待报名(等待报名快速开始游戏)
     CANSINGUP,  //可以报名
-    SIGNUPED,   //报名成功(等待快速开始游戏)
+    SIGNUPED,   //报名成功
+    QUICKGAME,  //等待快速开始游戏
     GAMMING,    //正在游戏中
     EXITTING,   //正在退出游戏
     KEEPPLAY,   //准备断线续玩

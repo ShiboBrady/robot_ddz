@@ -8,35 +8,44 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <queue>
 #include <list>
 #include "Robot.h"
-#include "confaccess.h"
 
+class CConfAccess;
 class NetLib
 {
 public:
     NetLib();
+
     ~NetLib(){};
+
     void start();
+
     void stop();
-    void ChangeStatusForSignUp(int robotNum);
-    void SendSignUpCondReq(struct bufferevent* bev, Robot& robot);
-    void SendSignUpReq(struct bufferevent* bev, Robot& robot);
-    bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
-    static void server_msg_cb(struct bufferevent* bev, void* arg);
-    static void event_cb(struct bufferevent *bev, short event, void *arg);
-    static void cmd_msg_cb(int fd, short events, void* arg);
-    static void heart_beat_time_cb(int fd, short events, void* arg);
-    static void init_time_cb(int fd, short events, void* arg);
-    static void verify_time_cb(int fd, short events, void* arg);
-    static void init_game_time_cb(int fd, short events, void* arg);
-    static void sign_up_cond_time_cb(int fd, short events, void* arg);
-    static void sign_up_time_cb(int fd, short events, void* arg);
-    static void delay_send_msg_time_cb(int fd, short events, void* arg);
-    static void query_room_state_time_cb(int fd, short events, void* arg);
-    static void quick_game_time_cb(int fd, short events, void* arg);
 
 private:
+    void ChangeStatusForRobot(int robotNum);
+
+    void SendReqForRobot(struct bufferevent* bev, Robot& robot);
+
+    bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
+
+    static void server_msg_cb(struct bufferevent* bev, void* arg);
+
+    static void event_cb(struct bufferevent *bev, short event, void *arg);
+
+    static void heart_beat_time_cb(int fd, short events, void* arg);
+
+    static void verify_time_cb(int fd, short events, void* arg);
+
+    static void init_game_time_cb(int fd, short events, void* arg);
+
+    static void delay_send_msg_time_cb(int fd, short events, void* arg);
+
+    static void query_room_state_time_cb(int fd, short events, void* arg);
+
+    void SendMsg(int msgId, const string& strRet, struct bufferevent* bev, Robot& robot);
 
     typedef struct MsgNode{
         MsgNode(struct bufferevent* bev, const std::string& msg, int msgId, int robotId)
@@ -47,6 +56,9 @@ private:
         int robotId_;
         struct event ev_timer_delay_;
     }*pMsgNode, msgNode;
+
+    //配置访问
+    CConfAccess* confAccess;
 
     std::string ip_;
     int port_;
@@ -64,11 +76,13 @@ private:
     int delaySendPassiveMsgTime_;
     int exitTime_;
     int quickGameTime_;
-    int isMatch_;
     int roomStateTime_;
+    int matchId_;
+    bool isMatch_;
 
     //libevent基础数据结构
     struct event_base* base;
+    std::queue<struct bufferevent*> taskQueue;         //选择入场机器人队列
     std::map<struct bufferevent*, Robot> bevToRobot;   //负责出牌的机器人
     std::map<struct bufferevent*, Robot> headerRobot;  //负责调度的机器人
     struct sockaddr_in server_addr;

@@ -14,6 +14,7 @@
 #include "stringutil.h"
 #include "log.h"
 #include "RobotConfig.h"
+#include "confaccess.h"
 
 using namespace std;
 using namespace YLYQ;
@@ -24,12 +25,23 @@ using namespace org_room2client;
 using namespace robot;
 
 NetLib::NetLib()
+    :confAccess(CConfAccess::GetConfInstance()),
+     ip_(confAccess->GetIP()),
+     port_(confAccess->GetPort()),
+     robotNum_(confAccess->GetRobotNum()),
+     robotIQLevel_(confAccess->GetIQLevel()),
+     robotIdStart_(confAccess->GetRobotIdRangeStart()),
+     robotIdEnd_(confAccess->GetRobotIdRangeEnd()),
+     heartBeatTime_(confAccess->GetHeartBeatTime()),
+     verifyTime_(confAccess->GetVerifyTime()),
+     initGameTime_(confAccess->GetInitGameTime()),
+     delaySendActiveMsgTime_(confAccess->GetSendActiveMsgDelayTime()),
+     delaySendPassiveMsgTime_(confAccess->GetSendPassiveMsgDelayTime()),
+     exitTime_(confAccess->GetProgramExitTime()),
+     roomStateTime_(confAccess->GetQueryRoomStateTime()),
+     matchId_(confAccess->GetMatchId()),
+     isMatch_(confAccess->GetIsMatch())
 {
-    if (!Init())
-    {
-        ERROR("Get params error, please check configure file!");
-        ::exit(0);
-    }
     memset(&server_addr, 0, sizeof(server_addr) );
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port_);
@@ -80,11 +92,8 @@ void NetLib::stop()
     //message OrgRoomDdzCancelSignUpReq {
     //    required int32 matchId = 1;     // 比赛 ID
     //}
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
     OrgRoomDdzCancelSignUpReq orgRoomDdzCancelSignUpReq;
-    orgRoomDdzCancelSignUpReq.set_matchid(::atoi(strMatchId.c_str()));
+    orgRoomDdzCancelSignUpReq.set_matchid(matchId_);
     string serializedStr;
     orgRoomDdzCancelSignUpReq.SerializeToString(&serializedStr);
     string strSend;
@@ -103,37 +112,77 @@ void NetLib::stop()
     event_base_loopexit(base, &timerEventExit);
 }
 
-void NetLib::ChangeStatusForSignUp(int robotNum)
+void NetLib::ChangeStatusForRobot(int robotNum)
 {
-    INFO("Will set %d robot for match.", robotNum);
-    map<struct bufferevent*, Robot>::iterator it = bevToRobot.begin();
-    for (it = bevToRobot.begin(); it != bevToRobot.end() && robotNum > 0; ++it)
+    if (isMatch_)
     {
+        INFO("Will set %d robot for match.", robotNum);
+    }
+    else
+    {
+        INFO("Will set %d robot for game.", robotNum);
+    }
+
+    //从队列中取出机器人，再将取出的机器人重新入队
+    int queueSize = int(taskQueue.size());
+    while (queueSize && robotNum)
+    {
+        --queueSize;
+        struct bufferevent* abev = taskQueue.front();
+        taskQueue.pop();
+
+        //查找消息对应的机器人
+        map<struct bufferevent*, Robot>::iterator it = bevToRobot.find(abev);
+        if ((bevToRobot.end()) == it)
+        {
+            //没找到
+            continue;
+        }
+
+        //找到
         if (WAITSIGNUP == (it->second).GetStatus() && NULL != it->first)
         {
             INFO("Choose robot %d.", (it->second).GetRobot().GetRobotId());
-            SendSignUpCondReq(it->first, it->second);
+            SendReqForRobot(it->first, it->second);
             --robotNum;
         }
+        taskQueue.push(abev); //重新入队
     }
+
+    if (0 == robotNum)
+    {
+        INFO("Find enough robot.");
+    }
+    else
+    {
+        INFO("Doesn't find enough robot, also need %d robot, waitting for next time.", robotNum);
+    }
+
 }
 
-void NetLib::SendSignUpCondReq(struct bufferevent* bev, Robot& robot)
+void NetLib::SendReqForRobot(struct bufferevent* bev, Robot& robot)
 {
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
-
-    OrgRoomDdzSignUpConditionReq orgRoomDdzSignUpConditionReq;
-    orgRoomDdzSignUpConditionReq.set_matchid(::atoi(strMatchId.c_str()));
-    string serializedStr;
-    orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
     string strSend;
-    serializedStr = SerializeMsg(robot::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr, strSend);
+    if (isMatch_)
+    {
+        string serializedStr;
+        OrgRoomDdzSignUpConditionReq orgRoomDdzSignUpConditionReq;
+        orgRoomDdzSignUpConditionReq.set_matchid(matchId_);
+        orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
+        SerializeMsg(robot::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr, strSend);
+    }
+    else
+    {
+        string serializedStr;
+        OrgRoomDdzQuickStartReq orgRoomDdzQuickStartReq;
+        orgRoomDdzQuickStartReq.set_roomid(matchId_);
+        orgRoomDdzQuickStartReq.SerializeToString(&serializedStr);
+        SerializeMsg(robot::MSGID_DDZ_QUICK_START_REQ, serializedStr, strSend);
+    }
     if (NULL != bev)
     {
         bufferevent_write(bev, strSend.c_str(), strSend.length());
-        DEBUG("Robot %d send sign up cond request.", robot.GetRobot().GetRobotId());
+        INFO("Robot %d send a request", robot.GetRobot().GetRobotId());
         robot.SetStatus(INITGAME);
     }
 }
@@ -252,76 +301,84 @@ void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
         delete [] msg;
         string strRet;
         bool result = (it->second).RobotProcess(msgId, strMsg, strRet);
-
         if (result)
         {
-            int msgIdBak = msgId;
-            if (robot::NOTIFY_CALLSCORE == msgId || robot::NOTIFY_DEALCARD == msgId) //叫分
-            {
-                msgId = robot::MSGID_CALLSCORE_REQ;
-            }
-            else if (robot::NOTIFY_TAKEOUT == msgId || robot::NOTIFY_BASECARD == msgId) //出牌
-            {
-                msgId = robot::MSGID_TAKEOUT_REQ;
-            }
-            else if (robot::NOTIFY_TRUST == msgId || robot::MSGID_KEEP_ACK == msgId) //取消托管
-            {
-                msgId = robot::MSGID_TRUST_CANCEL_REQ;
-            }
-            else if (robot::MSGID_INIT_GAME_ACK == msgId) //断线续玩
-            {
-                msgId = robot::MSGID_KEEP_REQ;
-            }
-            else if (robot::NOTIFY_SWITCH_SCENE == msgId) //准备完毕，可以发牌
-            {
-                msgId = robot::MSGID_READY_REQ;
-            }
-            else if (robot::MSGID_DDZ_SIGN_UP_CONDITION_ACK == msgId) //发送报名请求
-            {
-                msgId = robot::MSGID_DDZ_SIGN_UP_REQ;
-            }
-            else if (robot::MSGID_DDZ_ROOM_STAT_ACK == msgId) //修改机器人状态
-            {
-                //修改机器人状态为初始化游戏成功
-                int robotNum = ::atoi(strRet.c_str());
-                netlib->ChangeStatusForSignUp(robotNum);
-                continue;
-            }
-
-            string strSend;
-            result = netlib->SerializeMsg(msgId, strRet, strSend);
-            if (!result)
-            {
-                ERROR("Serialize message to be send failed.");
-            }
-            else
-            {
-                if (robot::NOTIFY_DEALCARD == msgIdBak || robot::NOTIFY_BASECARD == msgIdBak)
-                {
-                    //添加主动消息延时发送消息的定时器
-                    pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobot().GetRobotId());
-                    evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
-                    event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayActiveMsg));
-                    DEBUG("Add a timer, will delay send active message: %d to server for robot %d.", msgId, (it->second).GetRobot().GetRobotId());
-                }
-                else if (robot::NOTIFY_CALLSCORE == msgIdBak || robot::NOTIFY_TAKEOUT == msgIdBak)
-                {
-                    //添加被动消息延时发送消息的定时器
-                    pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, (it->second).GetRobot().GetRobotId());
-                    evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
-                    event_add(&(oneMsgNode->ev_timer_delay_), &(netlib->timerEventDelayPassiveMsg));
-                    DEBUG("Add a timer, will delay send passive message: %d to server for robot %d.", msgId, (it->second).GetRobot().GetRobotId());
-                }
-                else
-                {
-                    //无需延迟，直接发送
-                    int iSendResult = bufferevent_write(bev, strSend.c_str(), strSend.length());
-                    DEBUG("Send immediate message: %d to server for robot %d, send result: %d.", msgId, (it->second).GetRobot().GetRobotId(), iSendResult);
-                }
-            }
+            //需要发送数据
+            netlib->SendMsg(msgId, strRet, bev, it->second);
         }
     }
     //DEBUG("Read data this time over.");
+}
+
+void NetLib::SendMsg(int msgId, const string& strRet, struct bufferevent* bev, Robot& robot)
+{
+    int msgIdBak = msgId;
+    switch (msgId)
+    {
+        case robot::NOTIFY_CALLSCORE:
+            msgId = robot::MSGID_CALLSCORE_REQ; //叫分
+            break;
+        case robot::NOTIFY_DEALCARD:
+            msgId = robot::MSGID_CALLSCORE_REQ; //叫分
+            break;
+        case robot::NOTIFY_TAKEOUT:
+            msgId = robot::MSGID_TAKEOUT_REQ; //出牌
+            break;
+        case robot::NOTIFY_BASECARD:
+            msgId = robot::MSGID_TAKEOUT_REQ; //出牌
+            break;
+        case robot::NOTIFY_TRUST:
+            msgId = robot::MSGID_TRUST_CANCEL_REQ; //取消托管
+            break;
+        case robot::MSGID_KEEP_ACK:
+            msgId = robot::MSGID_TRUST_CANCEL_REQ; //取消托管
+            break;
+        case robot::MSGID_INIT_GAME_ACK:
+            msgId = robot::MSGID_KEEP_REQ; //断线续玩
+            break;
+        case robot::NOTIFY_SWITCH_SCENE:
+            msgId = robot::MSGID_READY_REQ; //准备完毕，可以发牌
+            break;
+        case robot::MSGID_DDZ_SIGN_UP_CONDITION_ACK:
+            msgId = robot::MSGID_DDZ_SIGN_UP_REQ; //发送报名请求
+            break;
+        case robot::MSGID_DDZ_ROOM_STAT_ACK:
+            ChangeStatusForRobot(::atoi(strRet.c_str()));
+            return;
+    }
+
+    string strSend;
+    bool result = SerializeMsg(msgId, strRet, strSend);
+    if (!result)
+    {
+        ERROR("Serialize message to be send failed.");
+    }
+    else
+    {
+        int robotId = robot.GetRobot().GetRobotId();
+        if (robot::NOTIFY_DEALCARD == msgIdBak || robot::NOTIFY_BASECARD == msgIdBak)
+        {
+            //添加主动消息延时发送消息的定时器
+            pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, robotId);
+            evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
+            event_add(&(oneMsgNode->ev_timer_delay_), &(timerEventDelayActiveMsg));
+            DEBUG("Add a timer, will delay send active message: %d to server for robot %d.", msgId, robotId);
+        }
+        else if (robot::NOTIFY_CALLSCORE == msgIdBak || robot::NOTIFY_TAKEOUT == msgIdBak)
+        {
+            //添加被动消息延时发送消息的定时器
+            pMsgNode oneMsgNode = new msgNode(bev, strSend, msgId, robotId);
+            evtimer_set(&(oneMsgNode->ev_timer_delay_), delay_send_msg_time_cb, oneMsgNode);
+            event_add(&(oneMsgNode->ev_timer_delay_), &(timerEventDelayPassiveMsg));
+            DEBUG("Add a timer, will delay send passive message: %d to server for robot %d.", msgId, robotId);
+        }
+        else
+        {
+            //无需延迟，直接发送
+            int iSendResult = bufferevent_write(bev, strSend.c_str(), strSend.length());
+            DEBUG("Send immediate message: %d to server for robot %d, send result: %d.", msgId, robotId, iSendResult);
+        }
+    }
 }
 
 void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
@@ -353,6 +410,17 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
         (netlib->headerRobot).insert(make_pair(it->first, it->second));
         INFO("Remove robot %d from the woker robot.", (it->second).GetRobot().GetRobotId());
         (netlib->bevToRobot).erase(it);
+
+        //将除了调度机器人以外的其他机器人加入任务队列中
+        while ((netlib->taskQueue).size()) //清空
+        {
+            (netlib->taskQueue).pop();
+        }
+        for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
+        {
+           netlib->taskQueue.push(it->first);
+        }
+        INFO("Add robot in task queue, size is: %d.", int(netlib->taskQueue.size()));
     }
 
     std::map<struct bufferevent*, Robot>::iterator it = (netlib->headerRobot).begin();
@@ -362,18 +430,15 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
         return;
     }
     INFO("Header robot\'s status is normal.");
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
-
-    int roomId = ::atoi(strMatchId.c_str());
     OrgRoomDdzRoomStatReq orgRoomDdzRoomStatReq;
-    orgRoomDdzRoomStatReq.add_roomids(roomId);
-    INFO("Begin to query room %d status.", roomId);
+    orgRoomDdzRoomStatReq.add_roomids(netlib->matchId_);
+    INFO("Begin to query room %d status.", netlib->matchId_);
+
     string serializedStr;
     orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
     string strSend;
     netlib->SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
+
     if (NULL != it->first)
     {
         bufferevent_write(it->first, strSend.c_str(), strSend.length());
@@ -385,43 +450,6 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
     }
 
     event_add(&(netlib->ev_timer_room_state), &(netlib->timerEventRoomState));/*重新添加定时器*/
-}
-
-void NetLib::quick_game_time_cb(int fd, short events, void* arg)
-{
-    NetLib* netlib = static_cast<NetLib*>(arg);
-    //message OrgRoomDdzQuickStartReq {
-    //    required int32 roomid = 1;
-    //}
-    INFO("***************** quick_game_time_cb START ******************");
-    string strMatchId;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "matchid", strMatchId, "1000");
-    INFO("matchid: %s.", strMatchId.c_str());
-
-    OrgRoomDdzQuickStartReq orgRoomDdzQuickStartReq;
-    orgRoomDdzQuickStartReq.set_roomid(::atoi(strMatchId.c_str()));
-    string serializedStr;
-    orgRoomDdzQuickStartReq.SerializeToString(&serializedStr);
-    string strSend;
-    netlib->SerializeMsg(robot::MSGID_DDZ_QUICK_START_REQ, serializedStr, strSend);
-
-    std::map<struct bufferevent*, Robot>::iterator it;
-    for (it = (netlib->bevToRobot).begin(); it != (netlib->bevToRobot).end(); ++it)
-    {
-        if (WAITSIGNUP == (it->second).GetStatus())
-        {
-            bufferevent_write(it->first, strSend.c_str(), strSend.length());
-            INFO("Robot %d send quick game request.", (it->second).GetRobot().GetRobotId());
-            break;
-        }
-    }
-    if (it == (netlib->bevToRobot).end())
-    {
-        INFO("Doesn't has valuable robot for quick game, waiting for next time.");
-        return;
-    }
-    event_add(&(netlib->ev_timer_quick_game), &(netlib->timerEventQuickGame));/*重新添加定时器*/
 }
 
 void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
@@ -455,11 +483,6 @@ void NetLib::heart_beat_time_cb(int fd, short events, void* arg)
 void NetLib::verify_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
-
-    string strSessionKey;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    bool bResult = confAccess->GetValue("sessionKey", "sessionKey", strSessionKey, "session_");
-
     bool bHasUnviryfiedRobot = false;
     VerifyReq verifyReq ;
     std::map<struct bufferevent*, Robot>::iterator it;
@@ -468,9 +491,11 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
         if (INIT == (it->second).GetStatus())
         {
             string robotId = StringUtil::Int2String((it->second).GetRobot().GetRobotId());
+            string sessionkey = netlib->confAccess->GetSessionKey();
+            INFO("robot id is %s, session key is: %s.", robotId.c_str(), sessionkey.c_str());
             verifyReq.Clear();
             verifyReq.set_userid(robotId);
-            verifyReq.set_sessionkey(StringUtil::Trim(strSessionKey) + robotId);
+            verifyReq.set_sessionkey(sessionkey + robotId);
             string serializedStr;
             verifyReq.SerializeToString(&serializedStr);
             string strSend;
@@ -493,16 +518,13 @@ void NetLib::init_game_time_cb(int fd, short events, void* arg)
 {
     NetLib* netlib = static_cast<NetLib*>(arg);
 
-    string strType;
-    string strName;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    confAccess->GetValue("game", "type", strType, "ddz");
-    confAccess->GetValue("game", "name", strName, "org_ddz_match");
+    string strType = netlib->confAccess->GetGameType();
+    string strName = netlib->confAccess->GetGameName();
     INFO("type: %s, name: %s.", strType.c_str(), strName.c_str());
 
     InitGameReq initGameReq;
-    initGameReq.set_type(StringUtil::Trim(strType).c_str());
-    initGameReq.set_name(StringUtil::Trim(strName).c_str());
+    initGameReq.set_type(strType);
+    initGameReq.set_name(strName);
     string serializedStr;
     initGameReq.SerializeToString(&serializedStr);
     string strSend;
@@ -578,68 +600,6 @@ void NetLib::event_cb(struct bufferevent *bev, short event, void *arg)
     }
 }
 
-bool NetLib::Init()
-{
-    std::string strPort;
-    std::string strRobotNum;
-    std::string strRobotIQLevel;
-    std::string strRobotIdStart;
-    std::string strRobotIdEnd;
-    std::string strHeartBeatTime;
-    std::string strVerifyTime;
-    std::string strInitGameTime;
-    std::string strSignUpCondTime;
-    std::string strSignUpTime;
-    std::string strDelaySendActiveTime;
-    std::string strDelaySendPassiveTime;
-    std::string strExitTime;
-    std::string strQuickGame;
-    std::string strIsMatch;
-    std::string strRoomStateTime;
-
-    bool bResult = false;
-    CConfAccess* confAccess = CConfAccess::GetConfInstance();
-    bResult = confAccess->GetValue("robot", "robotIdStart", strRobotIdStart, "110001");
-    bResult = confAccess->GetValue("robot", "robotIdEnd", strRobotIdEnd, "110001");
-    bResult = confAccess->GetValue("robot", "robotNum", strRobotNum, "1");
-    bResult = confAccess->GetValue("robot", "IQLevel", strRobotIQLevel, "0");
-    bResult = confAccess->GetValue("server", "ip", ip_, "127.0.0.1");
-    bResult = confAccess->GetValue("server", "port", strPort, "9999");
-    bResult = confAccess->GetValue("timer", "heartBeat", strHeartBeatTime, "30");
-    bResult = confAccess->GetValue("timer", "verify", strVerifyTime, "30");
-    bResult = confAccess->GetValue("timer", "initGame", strInitGameTime, "30");
-    bResult = confAccess->GetValue("timer", "signUpCond", strSignUpCondTime, "30");
-    bResult = confAccess->GetValue("timer", "signUp", strSignUpTime, "30");
-    bResult = confAccess->GetValue("timer", "activeMsgDelay", strDelaySendActiveTime, "8");
-    bResult = confAccess->GetValue("timer", "passiveMsgDelay", strDelaySendPassiveTime, "5");
-    bResult = confAccess->GetValue("timer", "exit", strExitTime, "2");
-    bResult = confAccess->GetValue("timer", "quickgame", strQuickGame, "2");
-    bResult = confAccess->GetValue("game", "isMatch", strIsMatch, "1");
-    bResult = confAccess->GetValue("timer", "roomstate", strRoomStateTime, "5");
-    if (bResult)
-    {
-        port_ = ::atoi(strPort.c_str());
-        robotNum_ = ::atoi(strRobotNum.c_str());
-        robotIQLevel_ = ::atoi(strRobotIQLevel.c_str());
-        robotIdStart_ = ::atoi(strRobotIdStart.c_str());
-        robotIdEnd_ = ::atoi(strRobotIdEnd.c_str());
-        heartBeatTime_ = ::atoi(strHeartBeatTime.c_str());
-        verifyTime_ = ::atoi(strVerifyTime.c_str());
-        initGameTime_ = ::atoi(strInitGameTime.c_str());
-        signUpCondTime_ = ::atoi(strSignUpCondTime.c_str());
-        signUpTime_ = ::atoi(strSignUpTime.c_str());
-        delaySendActiveMsgTime_ = ::atoi(strDelaySendActiveTime.c_str());
-        delaySendPassiveMsgTime_ = ::atoi(strDelaySendPassiveTime.c_str());
-        exitTime_ = ::atoi(strExitTime.c_str());
-        quickGameTime_ = ::atoi(strQuickGame.c_str());
-        isMatch_ = ::atoi(strIsMatch.c_str());
-        roomStateTime_ = ::atoi(strRoomStateTime.c_str());
-        DEBUG("Get configure successed.");
-    }
-    return bResult;
-
-}
-
 void NetLib::InitTimer()
 {
     //心跳协议的定时器初始化
@@ -666,6 +626,11 @@ void NetLib::InitTimer()
     timerEventExit.tv_sec = exitTime_;
     timerEventExit.tv_usec = 0;
 
+    //查询房间定时器初始化
+    timerEventRoomState.tv_sec = roomStateTime_;
+    timerEventRoomState.tv_usec = 0;
+
+    //+++++++++++++++++++++++++++//
     //添加心跳协议定时器
     evtimer_set(&ev_timer_heart_beat, heart_beat_time_cb, this);
     event_add(&ev_timer_heart_beat, &timerEventHeartBeat);
@@ -681,50 +646,10 @@ void NetLib::InitTimer()
     event_add(&ev_timer_init_game, &timerEventInitGame);
     DEBUG("Init game timer started!");
 
-    if (isMatch_)
-    {
-        //比赛场
-        //报名的定时器初始化
-        //timerEventSignInCond.tv_sec = signUpCondTime_;
-        //timerEventSignInCond.tv_usec = 0;
-
-        //报名的定时器初始化
-        //timerEventSignIn.tv_sec = signUpTime_;
-        //timerEventSignIn.tv_usec = 0;
-
-        //查询房间定时器初始化
-        timerEventRoomState.tv_sec = roomStateTime_;
-        timerEventRoomState.tv_usec = 0;
-
-        //添加查询报名条件定时器
-        //evtimer_set(&ev_timer_sign_in_cond, sign_up_cond_time_cb, this);
-        //event_add(&ev_timer_sign_in_cond, &timerEventSignInCond);
-        //DEBUG("Sign up cond timer started!");
-
-        //添加报名定时器
-        //evtimer_set(&ev_timer_sign_in, sign_up_time_cb, this);
-        //event_add(&ev_timer_sign_in, &timerEventSignIn);
-        //DEBUG("Sign up timer started!");
-
-        //添加查询房间状态定时器
-        evtimer_set(&ev_timer_room_state, query_room_state_time_cb, this);
-        event_add(&ev_timer_room_state, &timerEventRoomState);
-        DEBUG("Query room status timer started!");
-    }
-    else
-    {
-        //游戏场
-        //快速开始游戏定时器初始化
-        timerEventQuickGame.tv_sec = quickGameTime_;
-        timerEventQuickGame.tv_usec = 0;
-
-        //添加快速开始游戏定时器
-        evtimer_set(&ev_timer_quick_game, quick_game_time_cb, this);
-        event_add(&ev_timer_quick_game, &timerEventQuickGame);
-        DEBUG("Quick game timer started!");
-    }
-
-    DEBUG("Sign up timer started!");
+    //添加查询房间状态定时器
+    evtimer_set(&ev_timer_room_state, query_room_state_time_cb, this);
+    event_add(&ev_timer_room_state, &timerEventRoomState);
+    DEBUG("Query room status timer started!");
 }
 
 

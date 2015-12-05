@@ -1,6 +1,7 @@
 #ifndef _ABSTRACTPRODUCT_H_
 #define _ABSTRACTPRODUCT_H_
 #include <string>
+#include "confaccess.h"
 
 using namespace std;
 class Robot;
@@ -16,11 +17,13 @@ public:
 class AbstractProduct{
 
 public:
-    AbstractProduct(){};
+    AbstractProduct()
+        :confAccess(CConfAccess::GetConfInstance()){}
     virtual ~AbstractProduct(){};
 
 public:
     virtual bool operation( Robot& myRobot, const string& msg, string& retMsg ) = 0;
+    CConfAccess* confAccess;
 };
 
 //请求认证回应
