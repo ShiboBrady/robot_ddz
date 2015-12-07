@@ -192,9 +192,24 @@ int CConfAccess::GetMaxPlayerNum()
 bool CConfAccess::GetIsMatch()
 {
     std::string strIsMatch;
-    GetValue(_programName.c_str(), "isMatch", strIsMatch, "1");
+    GetValue(_programName.c_str(), "isMatch", strIsMatch, "0");
     int iIsMatch = ::atoi(strIsMatch.c_str());
-    return iIsMatch ? true : false;
+    return iIsMatch > 0 ? true : false;
+}
+
+bool CConfAccess::GetIsTimeTrial()
+{
+    std::string strIsTimeTrial;
+    GetValue(_programName.c_str(), "isTimeTrial", strIsTimeTrial, "0");
+    int iIsTimeTrial = ::atoi(strIsTimeTrial.c_str());
+    return iIsTimeTrial > 0 ? true : false;
+}
+
+int CConfAccess::GetLeftTimeForTimeTrial()
+{
+    std::string strLeftTime;
+    GetValue(_programName.c_str(), "timeLeft", strLeftTime, "300");
+    return ::atoi(strLeftTime.c_str());
 }
 
 int CConfAccess::GetPercentage()

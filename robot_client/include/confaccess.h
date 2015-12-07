@@ -37,6 +37,10 @@ public:
 
     bool GetIsMatch();
 
+    bool GetIsTimeTrial();
+
+    int GetLeftTimeForTimeTrial();
+
     int GetPercentage();
 
     std::string GetIP();

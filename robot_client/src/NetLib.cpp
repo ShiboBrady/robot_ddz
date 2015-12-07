@@ -40,7 +40,8 @@ NetLib::NetLib()
      exitTime_(confAccess->GetProgramExitTime()),
      roomStateTime_(confAccess->GetQueryRoomStateTime()),
      matchId_(confAccess->GetMatchId()),
-     isMatch_(confAccess->GetIsMatch())
+     isMatch_(confAccess->GetIsMatch()),
+     isTimeTrial_(confAccess->GetIsTimeTrial())
 {
     memset(&server_addr, 0, sizeof(server_addr) );
     server_addr.sin_family = AF_INET;
@@ -345,6 +346,9 @@ void NetLib::SendMsg(int msgId, const string& strRet, struct bufferevent* bev, R
         case robot::MSGID_DDZ_ROOM_STAT_ACK:
             ChangeStatusForRobot(::atoi(strRet.c_str()));
             return;
+        case robot::MSGID_DDZ_SIGN_UP_ACK://定时赛中可以发送报名请求
+            ChangeStatusForRobot(::atoi(strRet.c_str()));
+            return;
     }
 
     string strSend;
@@ -430,19 +434,31 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
         return;
     }
     INFO("Header robot\'s status is normal.");
-    OrgRoomDdzRoomStatReq orgRoomDdzRoomStatReq;
-    orgRoomDdzRoomStatReq.add_roomids(netlib->matchId_);
-    INFO("Begin to query room %d status.", netlib->matchId_);
-
-    string serializedStr;
-    orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
     string strSend;
-    netlib->SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
-
+    if (netlib->isTimeTrial_)
+    {
+        //定时赛
+        string serializedStr;
+        OrgRoomDdzSignUpConditionReq orgRoomDdzSignUpConditionReq;
+        orgRoomDdzSignUpConditionReq.set_matchid(netlib->matchId_);
+        orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
+        netlib->SerializeMsg(robot::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr, strSend);
+        INFO("Begin to query time trial %d status.", netlib->matchId_);
+    }
+    else
+    {
+        //游戏场和非定时赛
+        string serializedStr;
+        OrgRoomDdzRoomStatReq orgRoomDdzRoomStatReq;
+        orgRoomDdzRoomStatReq.add_roomids(netlib->matchId_);
+        orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
+        netlib->SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
+        INFO("Begin to query room %d status.", netlib->matchId_);
+    }
     if (NULL != it->first)
     {
         bufferevent_write(it->first, strSend.c_str(), strSend.length());
-        INFO("Robot %d send query room status requry once.", (it->second).GetRobot().GetRobotId());
+        INFO("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
     }
     else
     {

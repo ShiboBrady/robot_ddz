@@ -79,6 +79,7 @@ private:
     int roomStateTime_;
     int matchId_;
     bool isMatch_;
+    bool isTimeTrial_;
 
     //libevent基础数据结构
     struct event_base* base;

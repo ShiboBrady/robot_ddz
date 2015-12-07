@@ -110,7 +110,7 @@ bool GetVerifyAckInfo::operation( Robot& myRobot, const string& msg, string& ser
     INFO("Message for robot %d.", robot.GetRobotId());
     if (INIT != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in init status.", robot.GetRobotId());
+        DEBUG("Robot %d doesn't in init status, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     VerifyAck verifyAck;
@@ -149,7 +149,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
     INFO("Message for robot %d.", robot.GetRobotId());
     if (VERIFIED != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in verified status.", robot.GetRobotId());
+        ERROR("Robot %d doesn't in verified status, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     InitGameAck initGameAck;
@@ -193,7 +193,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
         {
             //不需要进行断线续玩操作
             myRobot.SetStatus(WAITSIGNUP);
-            INFO("Robot %d Game Init successed, robot status is: INITGAME.", robot.GetRobotId());
+            INFO("Robot %d Game Init successed, robot status is: WAITSIGNUP.", robot.GetRobotId());
         }
     }
     else
@@ -227,44 +227,50 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
     INFO("===================GetSignUpCondAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", robot.GetRobotId());
-    if (INITGAME != myRobot.GetStatus())
+    if (INITGAME != myRobot.GetStatus() && HEADER != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in game init status.", robot.GetRobotId());
+        ERROR("Robot %d doesn't in game init or header status, robot status is: %d, has been set to WAITSIGNUP.", robot.GetRobotId(), myRobot.GetStatus());
+        if (HEADER != myRobot.GetStatus())
+        {
+            myRobot.SetStatus(WAITSIGNUP);
+        }
         return false;
     }
     OrgRoomDdzSignUpConditionAck orgRoomDdzSignUpConditionAck;
     if (!orgRoomDdzSignUpConditionAck.ParseFromString(msg))
     {
-        ERROR("Parse OrgRoomDdzSignUpConditionAck protobuf error.");
+        ERROR("Parse OrgRoomDdzSignUpConditionAck protobuf error, has been set to WAITSIGNUP.");
+        if (HEADER != myRobot.GetStatus())
+        {
+            myRobot.SetStatus(WAITSIGNUP);
+        }
         return false;
     }
     int result = orgRoomDdzSignUpConditionAck.result();
     if (message::SUCCESS != result)
     {
-        DEBUG("Robot %d sign up condition failed, result is: %d.", robot.GetRobotId(), result);
+        ERROR("Robot %d sign up condition failed, result is: %d, has been to set to WAITSIGNUP.", robot.GetRobotId(), result);
+        if (HEADER != myRobot.GetStatus())
+        {
+            myRobot.SetStatus(WAITSIGNUP);
+        }
         return false;
     }
 
+    //开始判断是否可以报名
+    int costId = 0;
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
         INFO("Robot %d can sign up for free, status is: CANSINGUP.", robot.GetRobotId());
-        OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
-        orgRoomDdzSignUpReq.set_matchid(confAccess->GetMatchId());
-        orgRoomDdzSignUpReq.set_costid(0);
-        orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
-        myRobot.SetStatus(CANSINGUP);
-        return true;
     }
     else
     {
         bool cond = orgRoomDdzSignUpConditionAck.limit().enable();
         if (cond)
         {
-            INFO("Robot %d can sign up, status is: CANSINGUP.", robot.GetRobotId());
-            myRobot.SetStatus(CANSINGUP);
+            INFO("Robot %d can sign up.", robot.GetRobotId());
             int costSize = orgRoomDdzSignUpConditionAck.costlist_size();
             int index = 0;
-            int costId = 0;
             for (index = 0; index < costSize; ++index)
             {
                 if (orgRoomDdzSignUpConditionAck.costlist(index).enable())
@@ -283,25 +289,81 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
             }
             if (costSize == index)
             {
-                ERROR("Doesn't found enable cost in costlist, Robot %d can't sign up.", robot.GetRobotId());
+                ERROR("Doesn't found enable cost in costlist, Robot %d can't sign up, has been set to WAITSIGNUP.", robot.GetRobotId());
+                if (HEADER != myRobot.GetStatus())
+                {
+                    myRobot.SetStatus(WAITSIGNUP);
+                }
+                return false;
             }
             else
             {
                 INFO("Robot %d send sign up request.", robot.GetRobotId());
-                OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
-                orgRoomDdzSignUpReq.set_matchid(confAccess->GetMatchId());
-                orgRoomDdzSignUpReq.set_costid(costId);
-                orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
-                myRobot.SetStatus(CANSINGUP);
-                return true;
             }
         }
         else
         {
-            DEBUG("Robot %d can't sign up.", robot.GetRobotId());
+            DEBUG("Robot %d can't sign up, enable in sign up condition is false, has been set to WAITSIGNUP.", robot.GetRobotId());
+            if (HEADER != myRobot.GetStatus())
+            {
+                myRobot.SetStatus(WAITSIGNUP);
+            }
+            return false;
         }
     }
-    return false;
+
+    //走到这里说明是符合报名条件的
+    OrgRoomDdzSignUpReq orgRoomDdzSignUpReq;
+    orgRoomDdzSignUpReq.set_matchid(confAccess->GetMatchId());
+    orgRoomDdzSignUpReq.set_costid(costId);
+    orgRoomDdzSignUpReq.SerializeToString(&serializedStr);
+    if (HEADER != myRobot.GetStatus())
+    {
+        INFO("Robot has been set to CANSINGUP.");
+        myRobot.SetStatus(CANSINGUP);
+    }
+    else
+    {
+        time_t currentTimer = time(NULL);
+        time_t startSignUpTimer;
+        time_t endSignUpTimer;
+
+        int iCurrentTime = (int)currentTimer;//系统当前时间
+
+        int iStartSignUpTime = orgRoomDdzSignUpConditionAck.startsignuptime();//报名开始时间
+        startSignUpTimer = (time_t)iStartSignUpTime;
+
+        int iEndSignUpTime = orgRoomDdzSignUpConditionAck.endsignuptime();//报名结束时间
+        endSignUpTimer = (time_t)iEndSignUpTime;
+
+        int iStartTime = orgRoomDdzSignUpConditionAck.starttime();//距离比赛开始的时间
+
+        int leftTime = confAccess->GetLeftTimeForTimeTrial();//配置文件中设定的检查人数的剩余时间
+
+        INFO("Start sign up time is: %s, end sign up time is: %s, Current time is: %s.", \
+            ctime(&startSignUpTimer), ctime(&endSignUpTimer), ctime(&currentTimer));
+
+        INFO("From game has: %d second, check time is: %d second.", iStartTime, leftTime);
+        if (iCurrentTime >= iStartSignUpTime && iCurrentTime < iEndSignUpTime)
+        {
+            INFO("It\'s in sign up time trial match time.");
+            //在定时赛时间范围内
+            if (iStartTime > leftTime)
+            {
+                //说明还不到预先设定的检查时间
+                INFO("It\'s not time to check sign up people num.");
+                return false;
+            }
+            //该查询该场次的报名人数了
+            INFO("It\'s time to check sign up people num.");
+        }
+        else
+        {
+            INFO("It isn\'s in sign up time trial match time.");
+            return false;
+        }
+    }
+    return true;
 }
 
 //报名结果回应
@@ -318,22 +380,29 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     INFO("===================GetSignUpAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", robot.GetRobotId());
-    if (CANSINGUP != myRobot.GetStatus())
+    if (CANSINGUP != myRobot.GetStatus() && HEADER != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in can sign up status.", robot.GetRobotId());
+        DEBUG("Robot %d doesn't in can sign up status or header, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        if (HEADER != myRobot.GetStatus())
+        {
+            myRobot.SetStatus(WAITSIGNUP);
+        }
         return false;
     }
     OrgRoomDdzSignUpAck orgRoomDdzSignUpAck;
     if (!orgRoomDdzSignUpAck.ParseFromString(msg))
     {
         ERROR("Parse OrgRoomDdzSignUpAck protobuf msg error.");
+        if (HEADER != myRobot.GetStatus())
+        {
+            myRobot.SetStatus(WAITSIGNUP);
+        }
         return false;
     }
     int result = orgRoomDdzSignUpAck.result();
     if (message::SUCCESS == result)
     {
         //报名成功，开始等待游戏
-        myRobot.SetStatus(SIGNUPED);
         INFO("Robot %d sign up succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
     }
     else
@@ -341,14 +410,42 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
         if (508 == result)
         {
             INFO("Robit %d has already sign up.", robot.GetRobotId());
-            myRobot.SetStatus(SIGNUPED);
         }
         else
         {
-            DEBUG("Robot %d sign up failed, result is: %d.", robot.GetRobotId(), result);
+            ERROR("Robot %d sign up failed, result is: %d, robot has been to set to WAITSIGNUP status.", robot.GetRobotId(), result);
+            if (HEADER != myRobot.GetStatus())
+            {
+                myRobot.SetStatus(WAITSIGNUP);
+            }
+            return false;
         }
     }
-    return false;
+    if (HEADER != myRobot.GetStatus())
+    {
+        myRobot.SetStatus(SIGNUPED);
+        return false;
+    }
+    else
+    {
+        int signedUpUserCount = 0;
+        if (orgRoomDdzSignUpAck.has_usercount())
+        {
+            signedUpUserCount = orgRoomDdzSignUpAck.usercount();
+        }
+        int preSetMaxUserCount = confAccess->GetMaxPlayerNum();
+        INFO("Signed user: %d, Advanced set max user is: %d.", signedUpUserCount, preSetMaxUserCount);
+        if (signedUpUserCount >= preSetMaxUserCount)
+        {
+            INFO("There is enough user signed up, no need robot.");
+            return false;
+        }
+
+        int needRobotNum = preSetMaxUserCount - signedUpUserCount;
+        INFO("Need %d robot sign up for timer trial.", needRobotNum);
+        serializedStr = StringUtil::Int2String(needRobotNum);
+        return true;
+    }
 }
 
 bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
@@ -493,7 +590,7 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
     }
     if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME status.", robot.GetRobotId());
+        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME status, status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     myRobot.SetStatus(GAMMING);
@@ -1025,7 +1122,7 @@ bool GetCompetitionOverInfo::operation( Robot& myRobot, const string& msg, strin
     OrgRoomDdzMatchOverNtf orgRoomDdzMatchOverNtf;
     robot.RbtResetData();
     myRobot.SetStatus(WAITSIGNUP);
-    INFO("Receved competition notify, reset robot to sign up condation.");
+    INFO("Receved competition notify, reset robot to WAITSIGNUP status.");
     return false;
 }
 
