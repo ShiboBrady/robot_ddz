@@ -29,6 +29,8 @@ private:
 
     void SendReqForRobot(struct bufferevent* bev, Robot& robot);
 
+    void SendQueryRoomStatusReq(struct bufferevent* bev, Robot& robot);
+
     bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
 
     static void server_msg_cb(struct bufferevent* bev, void* arg);

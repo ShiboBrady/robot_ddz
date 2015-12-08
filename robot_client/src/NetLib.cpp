@@ -188,6 +188,35 @@ void NetLib::SendReqForRobot(struct bufferevent* bev, Robot& robot)
     }
 }
 
+
+void NetLib::SendQueryRoomStatusReq(struct bufferevent* bev, Robot& robot)
+{
+    std::map<struct bufferevent*, Robot>::iterator it = headerRobot.begin();
+    if (HEADER != (it->second).GetStatus())
+    {
+        INFO("Robot %d isn't a header.", (it->second).GetRobot().GetRobotId());
+        return;
+    }
+    INFO("Header robot\'s status is normal.");
+    string strSend;
+    string serializedStr;
+    OrgRoomDdzRoomStatReq orgRoomDdzRoomStatReq;
+    orgRoomDdzRoomStatReq.add_roomids(matchId_);
+    orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
+    SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
+    INFO("Begin to query room %d status.", matchId_);
+
+    if (NULL != it->first)
+    {
+        bufferevent_write(it->first, strSend.c_str(), strSend.length());
+        INFO("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
+    }
+    else
+    {
+        ERROR("Header robot is not avaliable, please reboot program.");
+    }
+}
+
 bool NetLib::SerializeMsg( int msgId, const string& body, string& strRet )
 {
     Message message;
@@ -341,7 +370,15 @@ void NetLib::SendMsg(int msgId, const string& strRet, struct bufferevent* bev, R
             msgId = robot::MSGID_READY_REQ; //准备完毕，可以发牌
             break;
         case robot::MSGID_DDZ_SIGN_UP_CONDITION_ACK:
-            msgId = robot::MSGID_DDZ_SIGN_UP_REQ; //发送报名请求
+            if (HEADER == robot.GetStatus())
+            {
+                SendQueryRoomStatusReq(bev, robot);
+                return;
+            }
+            else
+            {
+                msgId = robot::MSGID_DDZ_SIGN_UP_REQ; //发送报名请求
+            }
             break;
         case robot::MSGID_DDZ_ROOM_STAT_ACK:
             ChangeStatusForRobot(::atoi(strRet.c_str()));

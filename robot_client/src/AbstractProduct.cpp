@@ -261,7 +261,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
     int costId = 0;
     if (!orgRoomDdzSignUpConditionAck.has_limit())
     {
-        INFO("Robot %d can sign up for free, status is: CANSINGUP.", robot.GetRobotId());
+        INFO("Robot %d can sign up for free.", robot.GetRobotId());
     }
     else
     {
@@ -280,9 +280,16 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
                     INFO("Found enable cost in costlist, id is: %d.", myRobot.GetCost());
                     if (orgRoomDdzSignUpConditionAck.costlist(index).signed_())
                     {
-                        INFO("Robit %d has already sign up, status is: SIGNUPED.", robot.GetRobotId());
-                        myRobot.SetStatus(SIGNUPED);
-                        return false;
+                        if (HEADER != myRobot.GetStatus())
+                        {
+                            INFO("Robit %d has already sign up, status is: SIGNUPED.", robot.GetRobotId());
+                            myRobot.SetStatus(SIGNUPED);
+                            return false;
+                        }
+                        else
+                        {
+                            INFO("Header robit %d has already sign up.", robot.GetRobotId());
+                        }
                     }
                     break;
                 }
@@ -298,7 +305,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
             }
             else
             {
-                INFO("Robot %d send sign up request.", robot.GetRobotId());
+                INFO("Robot %d will send sign up request.", robot.GetRobotId());
             }
         }
         else
@@ -324,31 +331,55 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
     }
     else
     {
-        time_t currentTimer = time(NULL);
+        char strCurrentTime[128] = {0};
+        char strStartTime[128] = {0};
+        char strEndTime[128] = {0};
+        char strGameBeginTime[128] = {0};
+
+        time_t currentTimer = ::time(NULL);
         time_t startSignUpTimer;
         time_t endSignUpTimer;
+        time_t gameBeginTimer;
+
+        struct tm* tmCurrentTime;
+        struct tm* tmStartTime;
+        struct tm* tmEndTime;
+        struct tm* tmGameBeginTime;
 
         int iCurrentTime = (int)currentTimer;//系统当前时间
-
         int iStartSignUpTime = orgRoomDdzSignUpConditionAck.startsignuptime();//报名开始时间
-        startSignUpTimer = (time_t)iStartSignUpTime;
-
         int iEndSignUpTime = orgRoomDdzSignUpConditionAck.endsignuptime();//报名结束时间
+        int iGameBeginTime = orgRoomDdzSignUpConditionAck.starttime();//下一场比赛开始的时间
+
+        startSignUpTimer = (time_t)iStartSignUpTime;
         endSignUpTimer = (time_t)iEndSignUpTime;
+        gameBeginTimer = (time_t)iGameBeginTime;
 
-        int iStartTime = orgRoomDdzSignUpConditionAck.starttime();//距离比赛开始的时间
+        tmStartTime = ::localtime(&startSignUpTimer);
+        strftime(strStartTime, sizeof(strStartTime), "%Y-%m-%d %H:%M:%S", tmStartTime);
+        INFO("Start sign up time is: %s.", strStartTime);
 
-        int leftTime = confAccess->GetLeftTimeForTimeTrial();//配置文件中设定的检查人数的剩余时间
+        tmEndTime = ::localtime(&endSignUpTimer);
+        strftime(strEndTime, sizeof(strEndTime), "%Y-%m-%d %H:%M:%S", tmEndTime);
+        INFO("End sign up time is: %s.", strEndTime);
 
-        INFO("Start sign up time is: %s, end sign up time is: %s, Current time is: %s.", \
-            ctime(&startSignUpTimer), ctime(&endSignUpTimer), ctime(&currentTimer));
+        tmCurrentTime = ::localtime(&currentTimer);
+        strftime(strCurrentTime, sizeof(strCurrentTime), "%Y-%m-%d %H:%M:%S", tmCurrentTime);
+        INFO("Current time is: %s.", strCurrentTime);
 
-        INFO("From game has: %d second, check time is: %d second.", iStartTime, leftTime);
+        tmGameBeginTime = ::localtime(&gameBeginTimer);
+        strftime(strGameBeginTime, sizeof(strGameBeginTime), "%Y-%m-%d %H:%M:%S", tmGameBeginTime);
+        INFO("Game will start at: %s.", strGameBeginTime);
+
+        int confleftTime = confAccess->GetLeftTimeForTimeTrial();//配置文件中设定的检查人数的剩余时间
+        int curleftTime = iGameBeginTime - iCurrentTime;
+        INFO("Check time is: %d second, current left time: %d second", confleftTime, curleftTime);
+
         if (iCurrentTime >= iStartSignUpTime && iCurrentTime < iEndSignUpTime)
         {
             INFO("It\'s in sign up time trial match time.");
             //在定时赛时间范围内
-            if (iStartTime > leftTime)
+            if (curleftTime > confleftTime)
             {
                 //说明还不到预先设定的检查时间
                 INFO("It\'s not time to check sign up people num.");
@@ -380,32 +411,21 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     INFO("===================GetSignUpAckInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", robot.GetRobotId());
-    if (CANSINGUP != myRobot.GetStatus() && HEADER != myRobot.GetStatus())
+    if (CANSINGUP != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in can sign up status or header, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
-        if (HEADER != myRobot.GetStatus())
-        {
-            myRobot.SetStatus(WAITSIGNUP);
-        }
+        DEBUG("Robot %d doesn't in can sign up status, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        myRobot.SetStatus(WAITSIGNUP);
         return false;
     }
     OrgRoomDdzSignUpAck orgRoomDdzSignUpAck;
     if (!orgRoomDdzSignUpAck.ParseFromString(msg))
     {
         ERROR("Parse OrgRoomDdzSignUpAck protobuf msg error.");
-        if (HEADER != myRobot.GetStatus())
-        {
-            myRobot.SetStatus(WAITSIGNUP);
-        }
+        myRobot.SetStatus(WAITSIGNUP);
         return false;
     }
     int result = orgRoomDdzSignUpAck.result();
-    if (message::SUCCESS == result)
-    {
-        //报名成功，开始等待游戏
-        INFO("Robot %d sign up succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
-    }
-    else
+    if (0 != result)
     {
         if (508 == result)
         {
@@ -414,38 +434,15 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
         else
         {
             ERROR("Robot %d sign up failed, result is: %d, robot has been to set to WAITSIGNUP status.", robot.GetRobotId(), result);
-            if (HEADER != myRobot.GetStatus())
-            {
-                myRobot.SetStatus(WAITSIGNUP);
-            }
+            myRobot.SetStatus(WAITSIGNUP);
             return false;
         }
     }
-    if (HEADER != myRobot.GetStatus())
-    {
-        myRobot.SetStatus(SIGNUPED);
-        return false;
-    }
-    else
-    {
-        int signedUpUserCount = 0;
-        if (orgRoomDdzSignUpAck.has_usercount())
-        {
-            signedUpUserCount = orgRoomDdzSignUpAck.usercount();
-        }
-        int preSetMaxUserCount = confAccess->GetMaxPlayerNum();
-        INFO("Signed user: %d, Advanced set max user is: %d.", signedUpUserCount, preSetMaxUserCount);
-        if (signedUpUserCount >= preSetMaxUserCount)
-        {
-            INFO("There is enough user signed up, no need robot.");
-            return false;
-        }
 
-        int needRobotNum = preSetMaxUserCount - signedUpUserCount;
-        INFO("Need %d robot sign up for timer trial.", needRobotNum);
-        serializedStr = StringUtil::Int2String(needRobotNum);
-        return true;
-    }
+    //走到这里的都是报名成功的
+    INFO("Robot %d sign up succssed, robot status is: SIGNUPED.", robot.GetRobotId(), myRobot.GetStatus());
+    myRobot.SetStatus(SIGNUPED);
+    return false;
 }
 
 bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& serializedStr ){
@@ -478,67 +475,87 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     int userCount = orgRoomDdzRoomStatAck.stat(0).usercount();
     int matchId = confAccess->GetMatchId();
     bool isMatch_ = confAccess->GetIsMatch();
+    bool isTimeTrail = confAccess->GetIsTimeTrial();
     if (roomId != matchId)
     {
         INFO("Room id %d is not mater with matchId %d", roomId, matchId);
         return false;
     }
 
-    if (userCount > 0)
+    if (userCount <= 0)
     {
-        if (isMatch_)
-        {
-            //比赛场，大于1个人时，需要机器人进入
-            int maxPlayerNum = confAccess->GetMaxPlayerNum();
-            int percentage = confAccess->GetPercentage();
-            int needRobotNum = 0;
+        return false;
+    }
 
-            //需要按照百分比选择机器人数
-            int need = maxPlayerNum - userCount;
-            needRobotNum = int(need * (percentage / 100.00) + 0.5);
-            if (1 == need && 0 == needRobotNum)
-            {
-                needRobotNum = 1;
-            }
-            INFO("Limit player num is: %d, current room user is: %d, need enter robot num is: %d.", \
-                maxPlayerNum, userCount, needRobotNum);
-            if (needRobotNum > 0)
-            {
-                serializedStr = StringUtil::Int2String(needRobotNum);
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+    if (isTimeTrail)
+    {
+        //对于定时赛
+        int needRobotNum = 0;
+        int maxPlayerNum = confAccess->GetMaxPlayerNum();
+        INFO("Limit player num is: %d, current room user is: %d.",maxPlayerNum, userCount);
+        if (userCount >= maxPlayerNum)
+        {
+            INFO("There is enough user signed up, no need robot.");
+            return false;
+        }
+
+        needRobotNum = maxPlayerNum - userCount;
+        INFO("Need %d robot sign up for timer trial.", needRobotNum);
+        serializedStr = StringUtil::Int2String(needRobotNum);
+        return true;
+    }
+    else if (isMatch_)
+    {
+        //比赛场，大于1个人时，需要机器人进入
+        int maxPlayerNum = confAccess->GetMaxPlayerNum();
+        int percentage = confAccess->GetPercentage();
+        int needRobotNum = 0;
+
+        //需要按照百分比选择机器人数
+        int need = maxPlayerNum - userCount;
+        needRobotNum = int(need * (percentage / 100.00) + 0.5);
+        if (1 == need && 0 == needRobotNum)
+        {
+            needRobotNum = 1;
+        }
+        INFO("Limit player num is: %d, current room user is: %d, need enter robot num is: %d.", \
+            maxPlayerNum, userCount, needRobotNum);
+        if (needRobotNum > 0)
+        {
+            serializedStr = StringUtil::Int2String(needRobotNum);
+            return true;
         }
         else
         {
-            //游戏场，大于1个人时，且人数不是3的整数倍时，需要机器人进入
-            INFO("For game, current room user is: %d.", userCount);
-            int remainder = userCount % 3;
-            int needRobotNum = 0;
-            switch (remainder)
-            {
-                case 1:
-                    needRobotNum = 2;
-                    break;
-                case 2:
-                    needRobotNum = 1;
-                    break;
-                default:
-                    break;
-            }
-            INFO("Current room user is: %d, need enter robot num is: %d.", userCount, needRobotNum);
-            if (needRobotNum)
-            {
-                serializedStr = StringUtil::Int2String(needRobotNum);
-                return true;
-            }
-            else
-            {
-                return false;
-            }
+            return false;
+        }
+    }
+    else
+    {
+        //游戏场，大于1个人时，且人数不是3的整数倍时，需要机器人进入
+        INFO("For game, current room user is: %d.", userCount);
+        int remainder = userCount % 3;
+        int needRobotNum = 0;
+        switch (remainder)
+        {
+            case 1:
+                needRobotNum = 2;
+                break;
+            case 2:
+                needRobotNum = 1;
+                break;
+            default:
+                break;
+        }
+        INFO("Current room user is: %d, need enter robot num is: %d.", userCount, needRobotNum);
+        if (needRobotNum)
+        {
+            serializedStr = StringUtil::Int2String(needRobotNum);
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
 }
@@ -588,9 +605,9 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
         ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
         return false;
     }
-    if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus())
+    if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus() && GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME status, status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME or GAMMING status, status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     myRobot.SetStatus(GAMMING);
