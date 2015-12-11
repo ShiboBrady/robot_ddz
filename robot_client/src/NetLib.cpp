@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
 #include "message.pb.h"
 #include "connect.pb.h"
 #include "org_room2client.pb.h"
@@ -55,6 +56,14 @@ NetLib::NetLib()
 
 void NetLib::connect()
 {
+    struct event* signal_event = evsignal_new(base, SIGINT, signal_cb, this);
+    if (!signal_event || event_add(signal_event, NULL) < 0)
+    {
+        ERROR("Add signal event failed.");
+        ::exit(0);
+    }
+    DEBUG("Add signal event success.");
+
     int index = 0;
     for (index = 0; index != robotNum_; ++index)
     {
@@ -69,9 +78,18 @@ void NetLib::connect()
                 ERROR("Insert into bevToRobot failed.");
                 ::exit(0);
             }
-            bufferevent_socket_connect(insertResult.first->first, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            int rtn = bufferevent_socket_connect(insertResult.first->first, (struct sockaddr *)&server_addr, sizeof(server_addr));
+            if (rtn != 0)
+            {
+                ERROR("Cannot connect to server, robot %d init failed, index is: %d.", robotIdStart_ + index, index);
+                bufferevent_free(insertResult.first->first);
+                bevToRobot.erase(insertResult.first);
+                --index;
+                continue;
+            }
+            evutil_make_socket_nonblocking(bufferevent_getfd(insertResult.first->first));
             bufferevent_setcb(insertResult.first->first, server_msg_cb, NULL, event_cb, this);
-            bufferevent_enable(insertResult.first->first, EV_READ | EV_WRITE);
+            bufferevent_enable(insertResult.first->first, EV_READ | EV_WRITE | EV_PERSIST);
             DEBUG("Create a connection, index is: %d, init a Robot, Id is: %d.", index, robotIdStart_ + index);
         }
         else
@@ -86,31 +104,6 @@ void NetLib::connect()
 void NetLib::start()
 {
     event_base_dispatch(base);
-}
-
-void NetLib::stop()
-{
-    //message OrgRoomDdzCancelSignUpReq {
-    //    required int32 matchId = 1;     // 比赛 ID
-    //}
-    OrgRoomDdzCancelSignUpReq orgRoomDdzCancelSignUpReq;
-    orgRoomDdzCancelSignUpReq.set_matchid(matchId_);
-    string serializedStr;
-    orgRoomDdzCancelSignUpReq.SerializeToString(&serializedStr);
-    string strSend;
-    SerializeMsg(robot::MSGID_DDZ_CANCEL_SIGN_UP_REQ, serializedStr, strSend);
-
-    std::map<struct bufferevent*, Robot>::iterator it;
-    for (it = bevToRobot.begin(); it != bevToRobot.end(); ++it)
-    {
-        if (SIGNUPED == (it->second).GetStatus())
-        {
-            bufferevent_write(it->first, strSend.c_str(), strSend.length());
-            DEBUG("Send unsign req for robot %d.", (it->second).GetRobot().GetRobotId());
-            (it->second).SetStatus(EXITTING);
-        }
-    }
-    event_base_loopexit(base, &timerEventExit);
 }
 
 void NetLib::ChangeStatusForRobot(int robotNum)
@@ -183,7 +176,7 @@ void NetLib::SendReqForRobot(struct bufferevent* bev, Robot& robot)
     if (NULL != bev)
     {
         bufferevent_write(bev, strSend.c_str(), strSend.length());
-        INFO("Robot %d send a request", robot.GetRobot().GetRobotId());
+        DEBUG("Robot %d send a request", robot.GetRobot().GetRobotId());
         robot.SetStatus(INITGAME);
     }
 }
@@ -204,12 +197,12 @@ void NetLib::SendQueryRoomStatusReq(struct bufferevent* bev, Robot& robot)
     orgRoomDdzRoomStatReq.add_roomids(matchId_);
     orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
     SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
-    INFO("Begin to query room %d status.", matchId_);
+    DEBUG("Begin to query room %d status.", matchId_);
 
     if (NULL != it->first)
     {
         bufferevent_write(it->first, strSend.c_str(), strSend.length());
-        INFO("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
+        DEBUG("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
     }
     else
     {
@@ -245,6 +238,33 @@ bool NetLib::SerializeMsg( int msgId, const string& body, string& strRet )
     strRet.append((char*)&msgId, sizeof(msgId));
     strRet.append(serializedStr.c_str(), (int)serializedStr.length());
     return true;
+}
+
+void NetLib::signal_cb(evutil_socket_t signo, short event, void *arg)
+{
+    //message OrgRoomDdzCancelSignUpReq {
+    //    required int32 matchId = 1;     // 比赛 ID
+    //}
+    DEBUG("Receved SIGINI signal, program will exit...");
+    NetLib* netlib = static_cast<NetLib*>(arg);
+    OrgRoomDdzCancelSignUpReq orgRoomDdzCancelSignUpReq;
+    orgRoomDdzCancelSignUpReq.set_matchid(netlib->matchId_);
+    string serializedStr;
+    orgRoomDdzCancelSignUpReq.SerializeToString(&serializedStr);
+    string strSend;
+    netlib->SerializeMsg(robot::MSGID_DDZ_CANCEL_SIGN_UP_REQ, serializedStr, strSend);
+
+    std::map<struct bufferevent*, Robot>::iterator it;
+    for (it = netlib->bevToRobot.begin(); it != netlib->bevToRobot.end(); ++it)
+    {
+        if (SIGNUPED == (it->second).GetStatus())
+        {
+            bufferevent_write(it->first, strSend.c_str(), strSend.length());
+            DEBUG("Send unsign req for robot %d.", (it->second).GetRobot().GetRobotId());
+            (it->second).SetStatus(EXITTING);
+        }
+    }
+    event_base_loopexit(netlib->base, &(netlib->timerEventExit));
 }
 
 void NetLib::server_msg_cb(struct bufferevent* bev, void* arg)
@@ -480,7 +500,7 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
         orgRoomDdzSignUpConditionReq.set_matchid(netlib->matchId_);
         orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
         netlib->SerializeMsg(robot::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr, strSend);
-        INFO("Begin to query time trial %d status.", netlib->matchId_);
+        DEBUG("Begin to query time trial %d status.", netlib->matchId_);
     }
     else
     {
@@ -490,12 +510,12 @@ void NetLib::query_room_state_time_cb(int fd, short events, void* arg)
         orgRoomDdzRoomStatReq.add_roomids(netlib->matchId_);
         orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
         netlib->SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
-        INFO("Begin to query room %d status.", netlib->matchId_);
+        DEBUG("Begin to query room %d status.", netlib->matchId_);
     }
     if (NULL != it->first)
     {
         bufferevent_write(it->first, strSend.c_str(), strSend.length());
-        INFO("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
+        DEBUG("Header robot %d send query requery once.", (it->second).GetRobot().GetRobotId());
     }
     else
     {
@@ -545,7 +565,7 @@ void NetLib::verify_time_cb(int fd, short events, void* arg)
         {
             string robotId = StringUtil::Int2String((it->second).GetRobot().GetRobotId());
             string sessionkey = netlib->confAccess->GetSessionKey();
-            INFO("robot id is %s, session key is: %s.", robotId.c_str(), sessionkey.c_str());
+            DEBUG("robot id is %s, session key is: %s.", robotId.c_str(), sessionkey.c_str());
             verifyReq.Clear();
             verifyReq.set_userid(robotId);
             verifyReq.set_sessionkey(sessionkey + robotId);

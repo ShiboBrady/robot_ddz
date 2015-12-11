@@ -22,8 +22,6 @@ public:
 
     void start();
 
-    void stop();
-
 private:
     void ChangeStatusForRobot(int robotNum);
 
@@ -32,6 +30,8 @@ private:
     void SendQueryRoomStatusReq(struct bufferevent* bev, Robot& robot);
 
     bool SerializeMsg( int msgId, const std::string& body, std::string& strRet );
+
+    static void signal_cb(evutil_socket_t signo, short event, void *arg);
 
     static void server_msg_cb(struct bufferevent* bev, void* arg);
 

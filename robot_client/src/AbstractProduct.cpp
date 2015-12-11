@@ -110,7 +110,7 @@ bool GetVerifyAckInfo::operation( Robot& myRobot, const string& msg, string& ser
     INFO("Message for robot %d.", robot.GetRobotId());
     if (INIT != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in init status, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
+        ERROR("Robot %d doesn't in init status, robot status is: %d.", robot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     VerifyAck verifyAck;
@@ -310,7 +310,7 @@ bool GetSignUpCondAckInfo::operation( Robot& myRobot, const string& msg, string&
         }
         else
         {
-            DEBUG("Robot %d can't sign up, enable in sign up condition is false, has been set to WAITSIGNUP.", robot.GetRobotId());
+            ERROR("Robot %d can't sign up, enable in sign up condition is false, has been set to WAITSIGNUP.", robot.GetRobotId());
             if (HEADER != myRobot.GetStatus())
             {
                 myRobot.SetStatus(WAITSIGNUP);
@@ -455,6 +455,7 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     //    repeated RoomStat stat = 2;
     //}
     INFO("===================GetRoomStateAckInfo START=================");
+    static int lastRoomPlayerNum;
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", robot.GetRobotId());
     OrgRoomDdzRoomStatAck orgRoomDdzRoomStatAck;
@@ -474,6 +475,13 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     int roomId = orgRoomDdzRoomStatAck.stat(0).roomid();
     int userCount = orgRoomDdzRoomStatAck.stat(0).usercount();
     int matchId = confAccess->GetMatchId();
+    if (lastRoomPlayerNum == userCount)
+    {
+        //说明房间状态无变化，不用加派机器人入场了
+        INFO("Room %d status doesn\'t changed.", matchId);
+        return false;
+    }
+    lastRoomPlayerNum = userCount;
     bool isMatch_ = confAccess->GetIsMatch();
     bool isTimeTrail = confAccess->GetIsTimeTrial();
     if (roomId != matchId)
