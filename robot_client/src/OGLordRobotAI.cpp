@@ -7,10 +7,8 @@ using namespace std;
 using namespace AIUtils;
 using namespace robot;
 
-OGLordRobotAI::OGLordRobotAI( const int robotId, const int IQLevel )
+OGLordRobotAI::OGLordRobotAI()
     :mustHighLevel(false),
-     robotId(robotId),  //机器人id
-     level(IQLevel),    //机器人等级
      lordSeat(-1),     //地主位置
      aiSeat(-1),       //自己的位置
      curHandSeat(-1),  //当前出牌位置

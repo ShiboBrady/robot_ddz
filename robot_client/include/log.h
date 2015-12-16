@@ -5,18 +5,18 @@
 #ifndef MAX_LINE
 #define MAX_LINE 1024
 #endif
-#define DEBUG(format, ...) log::DEBUG_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
-#define INFO(format, ...) log::INFO_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
-#define ERROR(format, ...) log::ERROR_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
-#define WARN(format, ...) log::WARN_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
+#define DEBUG(format, ...) mylog4c::DEBUG_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
+#define INFO(format, ...) mylog4c::INFO_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
+#define ERROR(format, ...) mylog4c::ERROR_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
+#define WARN(format, ...) mylog4c::WARN_LOG((__FILE__), (__LINE__), format, ## __VA_ARGS__);
 
-namespace log
+namespace mylog4c
 {
-
-void DEBUG_LOG(const std::string& strFile, int iLine, const char* format, ...);
-void INFO_LOG(const std::string& strFile, int iLine, const char* format, ...);
-void ERROR_LOG(const std::string& strFile, int iLine, const char* format, ...);
-void WARN_LOG(const std::string& strFile, int iLine, const char* format, ...);
+    void DEBUG_LOG(const std::string& strFile, int iLine, const char* format, ...);
+    void INFO_LOG(const std::string& strFile, int iLine, const char* format, ...);
+    void ERROR_LOG(const std::string& strFile, int iLine, const char* format, ...);
+    void WARN_LOG(const std::string& strFile, int iLine, const char* format, ...);
+}
 
 class CLog
 {
@@ -28,6 +28,5 @@ private:
     static CLog* pInstance;
 };
 
-}
 #endif
 

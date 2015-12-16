@@ -14,6 +14,8 @@ LIB = -lprotobuf\
       -levent\
 	  -llog4cplus -lpthread
 
+STARD=-std=c++0x
+
 VPATH = $(SOURCE_FILE)
 
 OBJC = $(subst .cpp,.o, $(addprefix $(OBJ_FILE), $(subst $(SOURCE_FILE), , $(wildcard $(SOURCE_FILE)/*.cpp))))
@@ -26,7 +28,7 @@ $(TARGET_FILE)/$(TARGET):$(OBJC)
 	$(CC) -o $@ -I$(INCLUDE_FILE) $^ $(LIB)
 
 $(OBJ_FILE)/%.o:%.cpp
-	$(CC) -c -I$(INCLUDE_FILE) -o $@ $<
+	$(CC) -c -I$(INCLUDE_FILE) -o $@ $< ${STARD}
 
 clean:
 	rm -rf $(OBJ_FILE) $(TARGET_FILE)

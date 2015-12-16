@@ -14,7 +14,7 @@ using namespace robot;
 class OGLordRobotAI
 {
 public:
-	OGLordRobotAI( const int robotId, const int IQLevel );
+	OGLordRobotAI();
 	~OGLordRobotAI(void){};
 
 	// 收到发牌消息
@@ -89,9 +89,6 @@ public:
 	virtual bool RbtOutGetLastError( int &errorCode);           // 返回当前错误码
 
     //访问数据成员接口
-    virtual void SetRobotId( int robotId ) { this->robotId = robotId; };
-    virtual int GetRobotId() { return robotId; };
-
     virtual void SetAiSeat( int aiSeat ) { this->aiSeat = aiSeat; };
     virtual int GetAiSeat() { return aiSeat; };
 
@@ -101,11 +98,11 @@ public:
     virtual void SetLordSeat( int lordSeat ) { this->lordSeat = lordSeat; };
     virtual int GetLordSeat() { return lordSeat; };
 
-    void RecoveryHandCards();
+    virtual void RecoveryHandCards();
 
-    bool IsLastTakeOutCards( std::vector<int>& vecCurrentCards );
+    virtual bool IsLastTakeOutCards( std::vector<int>& vecCurrentCards );
 
-    void RemoveExtraCards( std::vector<int>& vecCurrentCards );
+    virtual void RemoveExtraCards( std::vector<int>& vecCurrentCards );
 private:
 
 	void updateAiPosition();//更新自己的位置，确定是地主或是地主上家还是地主下家
@@ -259,8 +256,6 @@ private:
     RobotStatus _status;
 
     std::vector<int> vecLastTakeOutCards;//最后一次出牌纪录
-
-    int robotId;//机器人id
 
 	int level;//机器人智能等级，目前有0、1
 

@@ -7,26 +7,28 @@ class Robot
 {
 public:
     Robot( const int robotId, const int IQLevel )
-        :robot_(robotId, IQLevel),
+        :robot_(),
+         robotId_(robotId),
          needKeepPlay_(false),
          status_(robot::INIT),
-         factory_(){};
-    ~Robot(){};
-    bool RobotProcess( int msgId, const std::string& msg, std::string& result );
-    OGLordRobotAI& GetRobot() { return robot_; };
+         factory_()
+         { robot_.RbtInSetLevel(IQLevel); }
+    ~Robot(){}
+    virtual bool RobotProcess( int msgId, const std::string& msg, std::string& result );
+    virtual OGLordRobotAI& GetRobot() { return robot_; }
 
-    void SetStatus( RobotStatus status ) { status_ = status; };
-    robot::RobotStatus GetStatus() { return status_; };
+    virtual void SetRobotId( int robotId ) { robotId_ = robotId; }
+    virtual int GetRobotId() { return robotId_; }
 
-    void SetCost( int costId ) { costId_ = costId; };
-    bool GetCost() { return costId_; };
+    virtual void SetStatus( RobotStatus status ) { status_ = status; }
+    virtual robot::RobotStatus GetStatus() { return status_; }
 
-    void SetNeedKeepPlay( bool needKeepPlay ) { needKeepPlay_ = needKeepPlay; };
-    bool GetNeedKeepPlay() { return needKeepPlay_; };
+    virtual void SetNeedKeepPlay( bool needKeepPlay ) { needKeepPlay_ = needKeepPlay; }
+    virtual bool GetNeedKeepPlay() { return needKeepPlay_; }
 private:
     OGLordRobotAI robot_;
+    int robotId_;
     robot::RobotStatus status_;
-    int costId_;    //报名比赛时的费用ID
     bool needKeepPlay_;    //是否需要断线续玩
     SimpleFactory factory_;
     AbstractProduct* product_;

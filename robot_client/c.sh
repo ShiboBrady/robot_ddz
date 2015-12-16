@@ -18,9 +18,9 @@ for desPath in $@;do
 		mkdir -p ${desPath}
     fi
     
-    #if [ ! -d ${desPath}/${confFilePath} ];then
+    if [ ! -d ${desPath}/${confFilePath} ];then
         cp -rf ${confFilePath} ${desPath}
-    #fi
+    fi
     
     cp -rf ${binFilePath} ${shellFile} ${desPath}
     

@@ -10,7 +10,6 @@
 
 using namespace std;
 using namespace log4cplus;
-using namespace log;
 
 static Logger global_pLogger;
 
@@ -56,7 +55,7 @@ CLog::CLog(const string& strLogFile)
 }
 */
 
-void log::DEBUG_LOG(const std::string& strFile, int iLine, const char* format, ...)
+void mylog4c::DEBUG_LOG(const std::string& strFile, int iLine, const char* format, ...)
 {
     char logInfo[MAX_LINE];
     va_list st;
@@ -68,7 +67,7 @@ void log::DEBUG_LOG(const std::string& strFile, int iLine, const char* format, .
     va_end(st);
 }
 
-void log::INFO_LOG(const std::string& strFile, int iLine, const char* format, ...)
+void mylog4c::INFO_LOG(const std::string& strFile, int iLine, const char* format, ...)
 {
     char logInfo[MAX_LINE];
     va_list st;
@@ -80,7 +79,7 @@ void log::INFO_LOG(const std::string& strFile, int iLine, const char* format, ..
     va_end(st);
 }
 
-void log::ERROR_LOG(const std::string& strFile, int iLine, const char* format, ...)
+void mylog4c::ERROR_LOG(const std::string& strFile, int iLine, const char* format, ...)
 {
     char logInfo[MAX_LINE];
     va_list st;
@@ -92,7 +91,7 @@ void log::ERROR_LOG(const std::string& strFile, int iLine, const char* format, .
     va_end(st);
 }
 
-void log::WARN_LOG(const std::string& strFile, int iLine, const char* format, ...)
+void mylog4c::WARN_LOG(const std::string& strFile, int iLine, const char* format, ...)
 {
     char logInfo[MAX_LINE];
     va_list st;

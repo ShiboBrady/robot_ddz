@@ -74,11 +74,11 @@ namespace StringUtil
             std::vector<std::string> vecTmp = SplitString(vec[iIndex], "=");
             if (2 == vecTmp.size())
             {
-                mapResult.insert(std::make_pair<std::string, std::string>(vecTmp[0], vecTmp[1]));
+                mapResult.insert(std::make_pair(vecTmp[0], vecTmp[1]));
             }
             else if (1 == vecTmp.size())
             {
-                mapResult.insert(std::make_pair<std::string, std::string>(vecTmp[0], ""));
+                mapResult.insert(std::make_pair(vecTmp[0], ""));
             }
             else
             {

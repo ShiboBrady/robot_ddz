@@ -1,6 +1,6 @@
 #include <iostream>
 #include <string>
-#include "NetLib.h"
+#include "EventProcess.h"
 #include "confaccess.h"
 #include "log.h"
 
@@ -20,7 +20,7 @@ void InitConfig(const char *confFile, const string& strProgramName)
         ::exit(0);
     }
     string strLogFile = confAccess->GetLogConfFilePath();
-    log::CLog::Initialize(strLogFile);
+    CLog::Initialize(strLogFile);
 }
 
 int main(int argc, char** argv)
@@ -35,8 +35,8 @@ int main(int argc, char** argv)
 
     const char confFile[] = "../configure/robot.conf";
     InitConfig(confFile, strCmdParam);
-    NetLib netLib;
-    netLib.start();
+    EventProcess eventProcess;
+    eventProcess.start();
     return 0;
 }
 
