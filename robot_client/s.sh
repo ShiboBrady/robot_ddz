@@ -1,16 +1,16 @@
 #!/bin/bash
 
-program=(game1 game2 game3 game4 three six_dali six_taotai ass newer free_timer)
+#program=(game1 game2 game3 game4 three six_dali six_taotai ass newer free_timer)
+program=(game1 game2 game3 game4 six_taotai newer free_timer)
 
 function startprogram()
 {
-    echo "Begin to start robot program for $1 ..."
     pidfilepath="pid"
     pidfile="robot."$1".pid"
     binfile="bin"
     exefile="robot_client"
-    libpath="/usr/local/lib"
-    #libpath="/home/zhangsb/usr/lib"
+    #libpath="/usr/local/lib"
+    libpath="/home/zhangsb/usr/lib"
     #libpath="/home/zhangshibo/usr/lib"
     logfilepath="log/"$1
 
@@ -18,103 +18,91 @@ function startprogram()
     mkdir -p $pidfilepath
     cd $pidfilepath
     if [ -f $pidfile ];then
-        echo "Exist pid file, please check robot is already running. if not, please delete pid file and try again."
-        cd -
-        return
+        echo "Failed! exist pid file."
+        cd - > /dev/null
+        return 1
     fi
-    cd -
+    cd - > /dev/null
 
     if [ ! -d ${binfile} ];then
-        echo "${binfile} not exist."
-        exit 0;
+        echo "Failed! ${binfile} not exist."
+        exit 2
     fi
 
     cd $binfile
     if [ ! -f ${exefile} ];then
-        echo "${exefile} not exist."
-        exit 0;
+        echo "Failed! ${exefile} not exist."
+        exit 2
     fi
-    cd -
+    cd - > /dev/null
 
     echo $LD_LIBRARY_PATH | grep -q "$libpath"
     if [[ $? -eq 1 ]];then
         export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libpath}
-        echo "export ${libpath} path."
-    else
-        echo "lib path has been set."
     fi
     
     ulimit -c unlimited
-    if [[ $? -eq 0 ]];then
-        echo "set core space success."
+    if [[ $? -eq 1 ]];then
+        echo "Failed! set core space failed."
+        exit 3
     fi
     
     cd ${binfile}
-    nohup ./${exefile} $1 >/dev/null &
+    nohup ./${exefile} $1 >/dev/null 2>&1 &
     pid=$!
-    cd -
+    cd - > /dev/null
     ps -ef | grep ${exefile} | grep -q ${pid}
     if [[ $? -eq 0 ]];then
-        echo "run robot success, pid is ${pid}."
         echo ${pid} > ${pidfilepath}/${pidfile}
-        if [[ $? -eq 0 ]];then
-            echo "write pid to file ${pidfilepath}/${pidfile} successed."
-        else
-            echo "write pid to file ${pidfilepath}/${pidfile} failed."
-            exit 1
+        if [[ $? -eq 1 ]];then
+            echo "Failed! write pid to file ${pidfile} failed."
+            return 4
         fi
-
     else
-        echo "run robot with param $1 failed."
+        echo "Failed! robot with param $1 failed."
+        return 5
     fi
+    return 0
 }
 
 function stopprogram()
 {
-    echo "Begin to stop robot program in $1 ..."
     pidfilepath="pid"
     pidfile="robot."$1".pid"
     killcommand="-2"
     
     if [ ! -d $pidfilepath ];then
-        echo "Doesn't exit pid file ${pidfilepath}."
-        exit 0;
+        exit 6
     fi  
     
     cd ${pidfilepath}
     if [ ! -f $pidfile ];then
-        echo "No pid file ${pidfile}."
-        cd -
-        return
+        cd - > /dev/null
+        return 7
     fi
 
     if [ ! -s $pidfile ];then
-        echo "pid file ${pidfile} is empty."
-        cd -
-        return;
+        cd - > /dev/null
+        return 8
     fi
 
     PID=$(cat ${pidfile})
 
-    echo "pid is: ${PID}"
-
     kill ${killcommand} $PID
 
-    if [[ $? -eq 0 ]];then
-        echo "stop robot program $PID success."
-    else
-        echo "stop robot program $PID failed."
+    if [[ $? -eq 1 ]];then
+        rm -rf ${pidfile}
+        return 9
     fi
     rm -rf ${pidfile}
-    echo "delete pidfile ${pidfile}."
-    cd -
+    cd - > /dev/null
+    return 0
 }
 
 function start()
 {
     if [ "$1"x = ""x ];then
-        echo "please enter second param."
-        exit 1;
+        exit 10
     elif [ "$1"x = "all"x ];then
         for item in ${program[@]}
         do
@@ -125,18 +113,19 @@ function start()
         echo ${program[@]} | grep -wq $1
         if [ $? -eq 0 ];then
             startprogram $1
+            return $?
         else
             echo "useless second param, please check."
-            exit 1;
+            exit 11
         fi
     fi
+    return 0
 }
 
 function stop()
 {
     if [ "$1"x = ""x ];then
-        echo "please enter second param."
-        exit 1;
+        exit 10
     elif [ "$1"x = "all"x ];then
         for item in ${program[@]}
         do
@@ -147,9 +136,9 @@ function stop()
         echo ${program[@]} | grep -wq $1
         if [ $? -eq 0 ];then
             stopprogram $1
+            return $?
         else
-            echo "useless second param, please check."
-            exit 1;
+            exit 11
         fi
     fi
 }
@@ -163,7 +152,7 @@ function status()
 
     if [ ! -d ${pidfilepath} ];then
         echo "pid file ${pidfilepath} doesn't exit."
-        exit 1;
+        exit 6
     fi
 
     cd ${pidfilepath}
@@ -176,15 +165,15 @@ function status()
         pid=$(cat ${pidfile})
         ps -ef | grep ${exefile} | grep -v "grep" | grep -q ${pid}
         if [ $? -eq 0 ];then
-            echo "robot for match $item is running."
+            echo "$item"
         fi
     done
-    cd -
+    cd - > /dev/null
+    return 0
 }
 
 if [ $# -lt 1 ];then
-    echo "usage:./s.sh start match1 or ./s.sh stop match1 or ./s.sh status."
-    exit 1
+    exit 12
 fi
 
 command=$1
@@ -192,19 +181,19 @@ match=$2
 
 case $command in
     "start")
-        echo "starting robot program..."
         start $match
+        exit $?
     ;;
     "stop")
-        echo "stopping robot program..."
         stop $match
+        exit $?
     ;;
     "status")
-        echo "search robot status on running..."
         status
+        exit $?
     ;;
     *)
         echo "param error."
+        exit 12
     ;;
 esac
-exit 0;
