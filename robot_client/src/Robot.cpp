@@ -5,7 +5,7 @@
 using namespace std;
 bool Robot::RobotProcess(int msgId, const string& msg, string& result)
 {
-    //处理消息
+    //澶勭悊娑堟伅
     product_ = factory_.createProduct(msgId);
     if (NULL == product_)
     {

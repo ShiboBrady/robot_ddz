@@ -253,8 +253,6 @@ private:
 
 	bool mustHighLevel;
 
-    RobotStatus _status;
-
     std::vector<int> vecLastTakeOutCards;//最后一次出牌纪录
 
 	int level;//机器人智能等级，目前有0、1
@@ -267,9 +265,9 @@ private:
 
 	int upSeat;//地主上方座位
 
-	Position aiPosition;
+	Position aiPosition;//自己的位置，以地主为中心
 
-	std::vector<int> leftoverCards;
+	std::vector<int> leftoverCards;//底牌
 
 	std::vector<int> aiCardsVec;//自己手中的牌，以17位的vector保存
 

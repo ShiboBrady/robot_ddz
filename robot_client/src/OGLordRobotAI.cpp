@@ -1,6 +1,5 @@
 #include "OGLordRobotAI.h"
 #include "AIUtils.h"
-#include "message.pb.h"
 #include "log.h"
 
 using namespace std;

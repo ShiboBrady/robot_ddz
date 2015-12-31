@@ -10,7 +10,7 @@
 #include <string.h>
 #include <algorithm>
 #include <numeric>
-#include "Robot.h"
+#include "RobotConfig.h"
 using namespace std;
 using namespace robot;
 

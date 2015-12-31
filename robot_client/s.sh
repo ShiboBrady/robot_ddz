@@ -38,7 +38,8 @@ function startprogram()
 
     echo $LD_LIBRARY_PATH | grep -q "$libpath"
     if [[ $? -eq 1 ]];then
-        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libpath}
+		toolslibpath=$(pwd)"/"${binfile}
+        export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libpath}:${toolslibpath}
     fi
     
     ulimit -c unlimited
