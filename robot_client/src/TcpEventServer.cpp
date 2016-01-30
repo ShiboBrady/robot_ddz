@@ -51,7 +51,6 @@ int TcpEventServer::InitConnection(std::string ip, int port, int connCount)
         int rtn = bufferevent_socket_connect(bev, (struct sockaddr *)&server_addr, sizeof(server_addr));
         if (rtn != 0)
         {
-            //ERROR("Cannot connect to server, robot %d init failed, index is: %d.", robotIdStart_ + index, index);
             bufferevent_free(bev);
             --index;
             continue;
@@ -61,7 +60,6 @@ int TcpEventServer::InitConnection(std::string ip, int port, int connCount)
         bufferevent_setcb(bev, ReadEventCb, NULL, EventCb, this);
         bufferevent_enable(bev, EV_READ | EV_WRITE | EV_PERSIST);
         mapConn_.insert(make_pair(fd, shared_ptr<Conn>(new Conn(fd, bev))));
-        //DEBUG("Create a connection, index is: %d, init a Robot, Id is: %d.", index, robotIdStart_ + index);
     }
     return index;
 }
@@ -99,7 +97,7 @@ bool TcpEventServer::addTimerEvent(void (*ptr)(int, short, void *), MsgNode* msg
     int flag = 0;
     if( !once )
     {
-        flag = EV_PERSIST;        
+        flag = EV_PERSIST;
     }
 
     //新建定时器信号事件
@@ -113,6 +111,33 @@ bool TcpEventServer::delTimerEvent(MsgNode* msgNode)
     evtimer_del(&(msgNode->ev_timer_));
     delete msgNode;
     return true;
+}
+
+void TcpEventServer::ReConnect(TcpEventServer* tcpEventServer, int id)
+{
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr) );
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port_);
+    inet_aton(ip_.c_str(), &server_addr.sin_addr);
+    struct bufferevent* bev;
+    do
+    {
+        bev = bufferevent_socket_new(base_, -1, BEV_OPT_CLOSE_ON_FREE);
+        int rtn = bufferevent_socket_connect(bev, (struct sockaddr *)&server_addr, sizeof(server_addr));
+        if (rtn != 0)
+        {
+            bufferevent_free(bev);
+            continue;
+        }
+    }while(0);
+    int fd = bufferevent_getfd(bev);
+    evutil_make_socket_nonblocking(fd);
+    bufferevent_setcb(bev, ReadEventCb, NULL, EventCb, this);
+    bufferevent_enable(bev, EV_READ | EV_WRITE | EV_PERSIST);
+    mapConn_.insert(make_pair(fd, shared_ptr<Conn>(new Conn(fd, bev))));
+    tcpEventServer->ReConnentEvent(mapConn_[fd], id);
+    INFO("Rebuild a connection");
 }
 
 void TcpEventServer::EventCb(struct bufferevent *bev, short event, void *arg)

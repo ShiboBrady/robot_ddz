@@ -17,10 +17,13 @@ public:
     ~EventProcess(){};
 
 protected:
-    void Event(std::shared_ptr<Conn> conn);
-    void ReadEvent(std::shared_ptr<Conn> conn);
+    virtual void Event(std::shared_ptr<Conn> conn);
+    virtual void ReadEvent(std::shared_ptr<Conn> conn);
+    virtual void ReConnentEvent(std::shared_ptr<Conn> conn, int id);
 
 private:
+    void Verify(int robotId, int fd);
+    void GameInit(int robotId, int fd);
     void InitParams();
     bool CheckConnCount();
     void InitRobot();
@@ -34,8 +37,6 @@ private:
 
     static void signal_cb(int signo, short event, void *arg);
     static void heart_beat_time_cb(int fd, short events, void* arg);
-    static void verify_time_cb(int fd, short events, void* arg);
-    static void init_game_time_cb(int fd, short events, void* arg);
     static void delay_send_msg_time_cb(int fd, short events, void* arg);
     static void query_room_state_time_cb(int fd, short events, void* arg);
 

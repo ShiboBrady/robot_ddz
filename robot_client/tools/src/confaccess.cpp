@@ -25,6 +25,7 @@ bool CConfAccess::Load(const std::string& fileName, const std::string& programNa
         return false;
     }
     _programName = programName;
+    cout << "ProgramName is " << _programName << endl;
 
     std::ifstream initFile(fileName.c_str());
 
@@ -69,6 +70,8 @@ bool CConfAccess::Load(const std::string& fileName, const std::string& programNa
             keyValue.first = StringUtil::Trim(command.substr(0, length));
             keyValue.second = StringUtil::Trim(command.substr(length + 1, command.size() - length));
             _sessionVct.back()._attrVct.push_back( keyValue );
+            cout << "Add key [" << keyValue.first << "] for session [" << _sessionVct.back()._session << "], value is: ["\
+                << keyValue.second << "]" << endl;
         }
         else if ( std::string::npos != (leftPos = command.find('['))
             && std::string::npos != (rightPos = command.find(']'))
@@ -85,6 +88,7 @@ bool CConfAccess::Load(const std::string& fileName, const std::string& programNa
              {
                  //push back session object
                  _sessionVct.push_back( ss );
+                 cout << "Add session: "  << ss._session << endl;
              }
         }
         else
@@ -107,7 +111,6 @@ bool CConfAccess::GetValue( const char* session, const char* key, std::string& v
     CSession ss;
     ss._session = session;
     SessionVector::const_iterator iterSession = std::find( _sessionVct.begin(), _sessionVct.end(), ss );
-
     if ( _sessionVct.end() != iterSession )
     {
         const KeyValueVector &attrVct = iterSession->_attrVct;
@@ -122,6 +125,10 @@ bool CConfAccess::GetValue( const char* session, const char* key, std::string& v
             }
         }
 
+    }
+    else
+    {
+        cout << "Doesn\'t find key [" << key << "] in session: [" << session << "]" << endl;
     }
     return result;
 }
@@ -285,7 +292,13 @@ int CConfAccess::GetQueryRoomStateTime()
 std::string CConfAccess::GetLogConfFilePath()
 {
     std::string strLogconfFilePath;
-    GetValue(_programName.c_str(), "logConf", strLogconfFilePath, "../configure/log4cplus.properties");
+    cout << "programe name length: " << _programName.length() << endl;
+    bool ret = GetValue(_programName.c_str(), "logConf", strLogconfFilePath, "../configure/log4cplus.properties");
+    if (!ret)
+    {
+        cout << "Get value failed by programName: [" << _programName.c_str() << "] for key: logConf." << endl;
+        cout << "_programName is: " << _programName << endl;
+    }
     return StringUtil::Trim(strLogconfFilePath);
 }
 

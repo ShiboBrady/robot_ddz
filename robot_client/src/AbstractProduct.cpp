@@ -19,8 +19,6 @@ using namespace message;
 using namespace org_room2client;
 using namespace AIUtils;
 
-static bool isLastRobotQuickGameReqFailed = false;
-
 AbstractProduct* SimpleFactory::createProduct(int type){
     AbstractProduct* temp = NULL;
     switch(type)
@@ -137,8 +135,9 @@ bool GetVerifyAckInfo::operation( Robot& myRobot, const string& msg, string& ser
     else
     {
         ERROR("Robot %d verify failed, result is: %d.", myRobot.GetRobotId(), result);
+        return false;
     }
-    return false;
+    return true;
 }
 
 //初始化游戏回应
@@ -456,7 +455,6 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     //    repeated RoomStat stat = 2;
     //}
     INFO("===================GetRoomStateAckInfo START=================");
-    static int lastRoomPlayerNum;
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", myRobot.GetRobotId());
     OrgRoomDdzRoomStatAck orgRoomDdzRoomStatAck;
@@ -468,34 +466,17 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     int result = orgRoomDdzRoomStatAck.result();
     if (0 != result)
     {
-        INFO("Request quick game failed, result is: %d.", result);
+        ERROR("Request quick game failed, result is: %d.", result);
         return false;
     }
-    int iRoomSize = orgRoomDdzRoomStatAck.stat_size();//对于机器人，roomsize只会是1.
-    INFO("room size (it's only equal 1): %d.", iRoomSize)
     int roomId = orgRoomDdzRoomStatAck.stat(0).roomid();
     int userCount = orgRoomDdzRoomStatAck.stat(0).usercount();
     int matchId = confAccess->GetMatchId();
-    if (lastRoomPlayerNum == userCount)
-    {
-        if (!isLastRobotQuickGameReqFailed)
-        {
-            //说明房间状态无变化，不用加派机器人入场了
-            INFO("Room %d status doesn\'t changed.", matchId);
-            return false;
-        }
-        else
-        {
-            //说明房间状态虽无变化，但是上一个机器人报名失败了，需要机器人补入场
-            INFO("Although room %d status doesn't changed, but last robot signed up failed, also need robot.", matchId);
-        }
-    }
-    lastRoomPlayerNum = userCount;
     bool isMatch_ = confAccess->GetIsMatch();
     bool isTimeTrail = confAccess->GetIsTimeTrial();
     if (roomId != matchId)
     {
-        INFO("Room id %d is not mater with matchId %d", roomId, matchId);
+        ERROR("Room id %d is not mater with matchId %d", roomId, matchId);
         return false;
     }
 
@@ -598,21 +579,18 @@ bool GetQuickGameAckInfo::operation( Robot& myRobot, const string& msg, string& 
         {
             myRobot.SetStatus(OTHER);
             ERROR("Robot %d request quick game failed, result code is: %d, coin is not enouth, robot status is: OTHER.", myRobot.GetRobotId(), result);
-            isLastRobotQuickGameReqFailed = true;
             return true;
         }
         else
         {
             myRobot.SetStatus(WAITSIGNUP);
             ERROR("Robot %d request quick game failed, result code is: %d, robot status is: WAITSIGNUP.", myRobot.GetRobotId(), result);
-            isLastRobotQuickGameReqFailed = true;
         }
     }
     else
     {
         myRobot.SetStatus(QUICKGAME);
         INFO("Robot %d request quick game succssed, robot status is: QUICKGAME.", myRobot.GetRobotId());
-        isLastRobotQuickGameReqFailed = false;
     }
     return false;
 }

@@ -37,14 +37,15 @@ public:
         std::string msg_;
         int msgId_;
         std::shared_ptr<Conn> conn_;
-        
+
 };
 
 class TcpEventServer
 {
+public:
     typedef std::map<int, std::shared_ptr<Conn> > connType;
     typedef std::map<int, std::shared_ptr<Conn> >::iterator connTypeIt;
-public:
+
     TcpEventServer()  {}
     ~TcpEventServer() {}
 
@@ -55,6 +56,7 @@ public:
     bool addSignalEvent(void (*ptr)(int, short, void *), int signo);
     bool addTimerEvent(void (*ptr)(int, short, void *), MsgNode* msgNode, bool once);
     bool delTimerEvent(MsgNode* msgNode);
+    void ReConnect(TcpEventServer* tcpEventServer, int id);
 
 protected:
     connType mapConn_;
@@ -62,8 +64,9 @@ protected:
     virtual void ReadEvent(std::shared_ptr<Conn> conn) {}
     virtual void WriteEvent(std::shared_ptr<Conn> conn) {}
     virtual void CloseEvent(std::shared_ptr<Conn> conn) {}
+    virtual void ReConnentEvent(std::shared_ptr<Conn> conn, int id) {}
 
-private:    
+private:
     std::string ip_;
     int port_;
     int connCount_;

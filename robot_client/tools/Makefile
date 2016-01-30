@@ -25,10 +25,10 @@ MAKE_DIR := $(shell mkdir -p $(OBJ_FILE) $(TARGET_FILE))
 .PHONY: clean show
 
 $(TARGET_FILE)/$(TARGET):$(OBJC)
-	$(CC) -shared -o $@ -I$(INCLUDE_FILE) $^ $(LIB)
+	$(CC) -g -shared -o $@ -I$(INCLUDE_FILE) $^ $(LIB)
 
 $(OBJ_FILE)/%.o:%.cpp
-	$(CC) -fPIC -c -I$(INCLUDE_FILE) -o $@ $< ${STARD}
+	$(CC) -g -fPIC -c -I$(INCLUDE_FILE) -o $@ $< ${STARD}
 
 clean:
 	rm -rf $(OBJ_FILE) $(TARGET_FILE)

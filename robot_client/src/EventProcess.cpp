@@ -28,7 +28,7 @@ using namespace robot;
 EventProcess::EventProcess()
     :confAccess_(CConfAccess::GetConfInstance()),
      headerRobot_(0)
-{    
+{
     InitParams();
     InitConnection(ip_, port_, robotNum_);
     InitRobot();
@@ -47,7 +47,23 @@ void EventProcess::Event(std::shared_ptr<Conn> conn)
     {
         INFO("Robot %d disconnected.", conn->robot_->GetRobotId());
     }
+    ReConnect(this, conn->robot_->GetRobotId());
 }
+
+void EventProcess::ReConnentEvent(std::shared_ptr<Conn> conn, int id)
+{
+    int fd = conn->fd_;
+    connTypeIt findRet = mapConn_.find(fd);
+    if (mapConn_.end() == findRet)
+    {
+        ERROR("Cannot found conn when reconnect server.");
+        return;
+    }
+    findRet->second->robot_ = std::shared_ptr<Robot>(new Robot(id, robotIQLevel_));
+    Verify(id, fd);
+    INFO("Robot %d has reconnected to server.", id);
+}
+
 
 /*消息的格式
     +----------------+----------+----------------------------+
@@ -126,6 +142,9 @@ void EventProcess::SendMsg(int msgId, const string& strRet, shared_ptr<Conn> con
     int msgIdBak = msgId;
     switch (msgId)
     {
+        case robot::MSGID_VERIFY_ACK: //身份验证请求应答, 接下来进行初始化游戏请求
+            GameInit(conn->robot_->GetRobotId(), conn->fd_);
+            return;
         case robot::NOTIFY_CALLSCORE:
             msgId = robot::MSGID_CALLSCORE_REQ; //叫分
             break;
@@ -223,7 +242,7 @@ void EventProcess::SendQueryRoomStatusReq(std::shared_ptr<Conn> conn, bool isTim
         orgRoomDdzSignUpConditionReq.set_matchid(matchId_);
         orgRoomDdzSignUpConditionReq.SerializeToString(&serializedStr);
         SerializeMsg(robot::MSGID_DDZ_SIGN_UP_CONDITION_REQ, serializedStr, strSend);
-        DEBUG("Begin to query time trial %d status.", matchId_);
+        INFO("Begin to query time trial %d status.", matchId_);
     }
     else
     {
@@ -233,7 +252,7 @@ void EventProcess::SendQueryRoomStatusReq(std::shared_ptr<Conn> conn, bool isTim
         orgRoomDdzRoomStatReq.add_roomids(matchId_);
         orgRoomDdzRoomStatReq.SerializeToString(&serializedStr);
         SerializeMsg(robot::MSGID_DDZ_ROOM_STAT_REQ, serializedStr, strSend);
-        DEBUG("Begin to query room %d status.", matchId_);
+        INFO("Begin to query room %d status.", matchId_);
     }
     int iSendRtn = conn->AddToWriteBuffer(strSend.c_str(), strSend.length());
     DEBUG("Header robot %d send query requery once, send result is: %d.", conn->robot_->GetRobotId(), iSendRtn);
@@ -256,10 +275,10 @@ void EventProcess::ChangeStatusForRobot(int robotNum)
     {
         auto robotFd = taskQueue_.front();
         taskQueue_.pop();
-        
+
         auto findRet = mapConn_.find(robotFd);//查找消息对应的机器人
         if ((mapConn_.end()) == findRet)
-        {            
+        {
             continue;//没找到
         }
 
@@ -367,19 +386,19 @@ void EventProcess::query_room_state_time_cb(int fd, short events, void* arg)
         conn->robot_->SetStatus(HEADER);
 
         //将除了调度机器人以外的其他机器人加入任务队列中
-        while ((eventProcess->taskQueue_).size()) //清空
-        {
-            (eventProcess->taskQueue_).pop();
-        }
-        for (auto it : eventProcess->mapConn_)
-        {
-            if (it.first == eventProcess->headerRobot_)
-            {
-                continue;
-            }
-            eventProcess->taskQueue_.push(it.first);
-        }
-        INFO("Add robot in task queue, size is: %d.", int(eventProcess->taskQueue_.size()));
+        //while ((eventProcess->taskQueue_).size()) //清空
+        //{
+        //    (eventProcess->taskQueue_).pop();
+        //}
+        //for (auto it : eventProcess->mapConn_)
+        //{
+        //    if (it.first == eventProcess->headerRobot_)
+        //    {
+        //        continue;
+        //    }
+        //    eventProcess->taskQueue_.push(it.first);
+        //}
+        //INFO("Add robot in task queue, size is: %d.", int(eventProcess->taskQueue_.size()));
     }
     shared_ptr<Conn> conn = eventProcess->mapConn_[eventProcess->headerRobot_];
     eventProcess->SendQueryRoomStatusReq(conn, true);
@@ -404,47 +423,35 @@ void EventProcess::heart_beat_time_cb(int fd, short events, void* arg)
     DEBUG("Send once heard beat.");
 }
 
-void EventProcess::verify_time_cb(int fd, short events, void* arg)
+void EventProcess::Verify(int robotId, int fd)
 {
-    MsgNode* oneMsgNode = static_cast<MsgNode*>(arg);
-    EventProcess* eventProcess = dynamic_cast<EventProcess*>(oneMsgNode->tcpEventServer_);
-    bool bHasUnviryfiedRobot = false;
-    VerifyReq verifyReq ;
-    for (auto it : eventProcess->mapConn_)
+    VerifyReq verifyReq;
+    string strRobotId = StringUtil::Int2String(robotId);
+    string sessionkey = confAccess_->GetSessionKey();
+    verifyReq.set_userid(strRobotId);
+    verifyReq.set_sessionkey(sessionkey + strRobotId);
+    string serializedStr;
+    verifyReq.SerializeToString(&serializedStr);
+    string strSend;
+    SerializeMsg(robot::MSGID_VERIFY_REQ, serializedStr, strSend);
+    connTypeIt findRet = mapConn_.find(fd);
+    if (mapConn_.end() == findRet)
     {
-        if (INIT == it.second->robot_->GetStatus())
-        {
-            string robotId = StringUtil::Int2String(it.second->robot_->GetRobotId());
-            string sessionkey = eventProcess->confAccess_->GetSessionKey();
-            DEBUG("robot id is %s, session key is: %s.", robotId.c_str(), sessionkey.c_str());
-            verifyReq.Clear();
-            verifyReq.set_userid(robotId);
-            verifyReq.set_sessionkey(sessionkey + robotId);
-            string serializedStr;
-            verifyReq.SerializeToString(&serializedStr);
-            string strSend;
-            eventProcess->SerializeMsg(robot::MSGID_VERIFY_REQ, serializedStr, strSend);
-
-            it.second->AddToWriteBuffer(strSend.c_str(), strSend.length());
-            DEBUG("Robot %d send verify once.", it.second->robot_->GetRobotId());
-            bHasUnviryfiedRobot = true;
-        }
+        ERROR("robot %d is not connected when verified.", robotId);
+        return;
     }
-    
-    if (!bHasUnviryfiedRobot)
+    if (INIT == findRet->second->robot_->GetStatus())
     {
-        eventProcess->delTimerEvent(eventProcess->VerifyTimer);
-        DEBUG("Has delete verify timer.");
+        findRet->second->AddToWriteBuffer(strSend.c_str(), strSend.length());
     }
+    DEBUG("Robot %d send verify once.", robotId);
+    taskQueue_.push(fd);
 }
 
-void EventProcess::init_game_time_cb(int fd, short events, void* arg)
+void EventProcess::GameInit(int robotId, int fd)
 {
-    MsgNode* oneMsgNode = static_cast<MsgNode*>(arg);
-    EventProcess* eventProcess = dynamic_cast<EventProcess*>(oneMsgNode->tcpEventServer_);
-
-    string strType = eventProcess->confAccess_->GetGameType();
-    string strName = eventProcess->confAccess_->GetGameName();
+    string strType = confAccess_->GetGameType();
+    string strName = confAccess_->GetGameName();
     INFO("type: %s, name: %s.", strType.c_str(), strName.c_str());
 
     InitGameReq initGameReq;
@@ -453,25 +460,19 @@ void EventProcess::init_game_time_cb(int fd, short events, void* arg)
     string serializedStr;
     initGameReq.SerializeToString(&serializedStr);
     string strSend;
-    serializedStr = eventProcess->SerializeMsg(robot::MSGID_INIT_GAME_REQ, serializedStr, strSend);
+    serializedStr = SerializeMsg(robot::MSGID_INIT_GAME_REQ, serializedStr, strSend);
 
-    bool bHasUnInitedRobot = false;
-    for (auto it : eventProcess->mapConn_)
+    connTypeIt findRet = mapConn_.find(fd);
+    if (mapConn_.end() == findRet)
     {
-        if (VERIFIED == it.second->robot_->GetStatus())
-        {
-            it.second->AddToWriteBuffer(strSend.c_str(), strSend.length());
-            DEBUG("Robot %d send init game once.", it.second->robot_->GetRobotId());
-            bHasUnInitedRobot = true;
-        }
+        ERROR("robot %d is not connected when game init.", robotId);
+        return;
     }
 
-    if (!bHasUnInitedRobot)
+    if (VERIFIED == findRet->second->robot_->GetStatus())
     {
-        eventProcess->delTimerEvent(eventProcess->InitGameTimer);
-        eventProcess->QueryRoomStateTimer = new MsgNode(eventProcess->roomStateTime_, 0, eventProcess);
-        eventProcess->addTimerEvent(query_room_state_time_cb, eventProcess->QueryRoomStateTimer, false);
-        DEBUG("Has been deleted init game timer, add query room status timer.");
+        findRet->second->AddToWriteBuffer(strSend.c_str(), strSend.length());
+        DEBUG("Robot %d send init game once.", robotId);
     }
 }
 
@@ -521,8 +522,11 @@ void EventProcess::InitRobot()
     int index = 0;
     for (auto it : mapConn_)
     {
-        it.second->robot_ = std::shared_ptr<Robot>(new Robot(robotIdStart_ + (index++), robotIQLevel_));
-        DEBUG("Robot %d inited.", robotIdStart_ + index - 1);
+        int robotId = robotIdStart_ + index;
+        it.second->robot_ = std::shared_ptr<Robot>(new Robot(robotId, robotIQLevel_));
+        INFO("Robot %d inited, send verified req", robotIdStart_ + index - 1);
+        Verify(robotId, it.second->fd_);
+        ++index;
     }
 }
 
@@ -536,12 +540,10 @@ void EventProcess::InitTimer()
 {
     DEBUG("***************** InitTimer START ******************");
     HeartBeatTimer = new MsgNode(heartBeatTime_, 0, this);
-    VerifyTimer = new MsgNode(verifyTime_, 0, this);
-    InitGameTimer = new MsgNode(initGameTime_, 0, this);
+    QueryRoomStateTimer = new MsgNode(roomStateTime_, 0, this);
     //+++++++++++++++++++++++++++//
     addTimerEvent(heart_beat_time_cb, HeartBeatTimer, false);
-    addTimerEvent(verify_time_cb, VerifyTimer, false);
-    addTimerEvent(init_game_time_cb, InitGameTimer, false);
+    addTimerEvent(query_room_state_time_cb, QueryRoomStateTimer, false);
 }
 
 void EventProcess::InitParams()
