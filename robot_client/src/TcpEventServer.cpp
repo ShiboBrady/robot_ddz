@@ -53,6 +53,7 @@ int TcpEventServer::InitConnection(std::string ip, int port, int connCount)
         {
             bufferevent_free(bev);
             --index;
+            ERROR("Connect to server failed, index is: %d.", index);
             continue;
         }
         int fd = bufferevent_getfd(bev);
@@ -61,6 +62,7 @@ int TcpEventServer::InitConnection(std::string ip, int port, int connCount)
         bufferevent_enable(bev, EV_READ | EV_WRITE | EV_PERSIST);
         mapConn_.insert(make_pair(fd, shared_ptr<Conn>(new Conn(fd, bev))));
     }
+    INFO("Successed connected %d connection.", index);
     return index;
 }
 
@@ -120,17 +122,13 @@ void TcpEventServer::ReConnect(TcpEventServer* tcpEventServer, int id)
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port_);
     inet_aton(ip_.c_str(), &server_addr.sin_addr);
-    struct bufferevent* bev;
-    do
+    struct bufferevent* bev = bufferevent_socket_new(base_, -1, BEV_OPT_CLOSE_ON_FREE);
+    if (0 != bufferevent_socket_connect(bev, (struct sockaddr *)&server_addr, sizeof(server_addr)))
     {
-        bev = bufferevent_socket_new(base_, -1, BEV_OPT_CLOSE_ON_FREE);
-        int rtn = bufferevent_socket_connect(bev, (struct sockaddr *)&server_addr, sizeof(server_addr));
-        if (rtn != 0)
-        {
-            bufferevent_free(bev);
-            continue;
-        }
-    }while(0);
+       ERROR("Connect to server failed when reconnection, connect info is: %d.", id);
+       bufferevent_free(bev);
+       return;
+    }
     int fd = bufferevent_getfd(bev);
     evutil_make_socket_nonblocking(fd);
     bufferevent_setcb(bev, ReadEventCb, NULL, EventCb, this);
@@ -143,6 +141,7 @@ void TcpEventServer::ReConnect(TcpEventServer* tcpEventServer, int id)
 void TcpEventServer::EventCb(struct bufferevent *bev, short event, void *arg)
 {
     //Event();
+    bool isErrorOccurence = false;
     TcpEventServer* tcpServer = static_cast<TcpEventServer*>(arg);
     if (event & BEV_EVENT_EOF)
     {
@@ -150,6 +149,7 @@ void TcpEventServer::EventCb(struct bufferevent *bev, short event, void *arg)
     }
     else if (event & BEV_EVENT_ERROR)
     {
+        isErrorOccurence = true;
         ERROR("Some other error.");
     }
     else if( event & BEV_EVENT_CONNECTED)
@@ -165,7 +165,7 @@ void TcpEventServer::EventCb(struct bufferevent *bev, short event, void *arg)
         bufferevent_free(bev);
         ERROR("One client disconnected.");
         bev = NULL;
-        tcpServer->Event(findRet->second);
+        tcpServer->Event(findRet->second, isErrorOccurence);
         tcpServer->mapConn_.erase(findRet);
     }
 }

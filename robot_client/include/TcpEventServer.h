@@ -60,7 +60,7 @@ public:
 
 protected:
     connType mapConn_;
-    virtual void Event(std::shared_ptr<Conn> conn) {}
+    virtual void Event(std::shared_ptr<Conn> conn, bool isErrorOccurence) {}
     virtual void ReadEvent(std::shared_ptr<Conn> conn) {}
     virtual void WriteEvent(std::shared_ptr<Conn> conn) {}
     virtual void CloseEvent(std::shared_ptr<Conn> conn) {}

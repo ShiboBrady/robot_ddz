@@ -1247,8 +1247,10 @@ void OGLordRobotAI::farmerTakeOutLordOnly1Card( Hand &hand )
 						}
 					}
 				}
-				hand.type = SOLO;
-				hand.keyPoint = soloHands.back().keyPoint;
+				if (soloHands.size() >= 1) {
+					hand.type = SOLO;
+					hand.keyPoint = soloHands.back().keyPoint;
+				}
 				return;
 			}
 		}

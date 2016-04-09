@@ -17,7 +17,7 @@ public:
     ~EventProcess(){};
 
 protected:
-    virtual void Event(std::shared_ptr<Conn> conn);
+    virtual void Event(std::shared_ptr<Conn> conn, bool isErrorOccurence);
     virtual void ReadEvent(std::shared_ptr<Conn> conn);
     virtual void ReConnentEvent(std::shared_ptr<Conn> conn, int id);
 
@@ -58,7 +58,7 @@ private:
     bool isTimeTrial_;
 
     CConfAccess* confAccess_;
-    std::queue<int> taskQueue_;   //选择入场机器人队列
+    std::queue<pair<int, int> > taskQueue_;   //选择入场机器人队列
     int headerRobot_;             //负责调度的机器人
 
     MsgNode* HeartBeatTimer;

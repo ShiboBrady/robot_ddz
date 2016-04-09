@@ -174,21 +174,22 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
             //message KeepPlayingReq {
             //    required int32 rev = 1;         // reserved
             //}
-            KeepPlayingReq keepPlayingReq;
-            keepPlayingReq.set_rev(1001);
-            if (!keepPlayingReq.SerializeToString(&serializedStr))
-            {
-                ERROR("KeepPlayingReq serialize failed.");
-                return false;
-            }
+            //KeepPlayingReq keepPlayingReq;
+            //keepPlayingReq.set_rev(1001);
+            //if (!keepPlayingReq.SerializeToString(&serializedStr))
+            //{
+            //    ERROR("KeepPlayingReq serialize failed.");
+            //    return false;
+            //}
 
-            if (!keepPlayingReq.IsInitialized())
-            {
-                ERROR("keepPlayingReq isn't a protobuf packet, length is: %d.", serializedStr.length());
-                return false;
-            }
-            INFO("Robot %d will send a keepPlayingReq.", myRobot.GetRobotId());
-            return true;
+            //if (!keepPlayingReq.IsInitialized())
+            //{
+            //    ERROR("keepPlayingReq isn't a protobuf packet, length is: %d.", serializedStr.length());
+            //    return false;
+            //}
+            //INFO("Robot %d will send a keepPlayingReq.", myRobot.GetRobotId());
+            //return true;
+            return false;
         }
         else
         {
@@ -199,7 +200,7 @@ bool GetInitGameAckInfo::operation( Robot& myRobot, const string& msg, string& s
     }
     else
     {
-        DEBUG("Robot %d Game Init failed, result is: %d.", myRobot.GetRobotId(), result);
+        ERROR("Robot %d Game Init failed, result is: %d.", myRobot.GetRobotId(), result);
     }
     return false;
 }
@@ -413,7 +414,7 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (CANSINGUP != myRobot.GetStatus())
     {
-        DEBUG("Robot %d doesn't in can sign up status, robot status is: %d.", myRobot.GetRobotId(), myRobot.GetStatus());
+        ERROR("Robot %d doesn't in can sign up status, robot status is: %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         myRobot.SetStatus(WAITSIGNUP);
         return false;
     }
@@ -430,6 +431,12 @@ bool GetSignUpAckInfo::operation( Robot & myRobot, const string & msg, string& s
         if (508 == result)
         {
             INFO("Robit %d has already sign up.", myRobot.GetRobotId());
+        }
+        else if (514 == result)
+        {
+            ERROR("Robot %d in gamming status. will wait for next status.");
+            myRobot.SetStatus(KEEPPLAY);
+            return false;
         }
         else
         {
@@ -474,14 +481,16 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     int matchId = confAccess->GetMatchId();
     bool isMatch_ = confAccess->GetIsMatch();
     bool isTimeTrail = confAccess->GetIsTimeTrial();
+    int minPlayerNum = confAccess->GetMinPlayNumNeekCheck();
     if (roomId != matchId)
     {
         ERROR("Room id %d is not mater with matchId %d", roomId, matchId);
         return false;
     }
 
-    if (userCount <= 0)
+    if (userCount < minPlayerNum)
     {
+        INFO("Current has %d User, lowest player check num is: %d.", userCount, minPlayerNum);
         return false;
     }
 
@@ -530,6 +539,11 @@ bool GetRoomStateAckInfo::operation( Robot& myRobot, const string& msg, string& 
     }
     else
     {
+        if (0 == minPlayerNum) //一般作为测试用
+        {
+            serializedStr = StringUtil::Int2String(3);
+            return true;
+        }
         //游戏场，大于1个人时，且人数不是3的整数倍时，需要机器人进入
         INFO("For game, current room user is: %d.", userCount);
         int remainder = userCount % 3;
@@ -612,11 +626,11 @@ bool GetEnterGameSceneInfo::operation( Robot& myRobot, const string& msg, string
         ERROR("Parse GameSwitchSceneNtf protobuf msg error.");
         return false;
     }
-    if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus() && GAMMING != myRobot.GetStatus())
-    {
-        ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME or GAMMING status, status is: %d.", myRobot.GetRobotId(), myRobot.GetStatus());
-        return false;
-    }
+    //if (SIGNUPED != myRobot.GetStatus() && QUICKGAME != myRobot.GetStatus() && GAMMING != myRobot.GetStatus())
+    //{
+    //    ERROR("Robot %d doesn't in SIGNUPED or QUICKGAME or GAMMING status, status is: %d.", myRobot.GetRobotId(), myRobot.GetStatus());
+    //    return false;
+    //}
     myRobot.SetStatus(GAMMING);
     robot.RbtResetData();
     INFO("Set robot %d to GAMMING status.", myRobot.GetRobotId());
@@ -656,7 +670,7 @@ bool GetGameStartInfo::operation( Robot& myRobot, const string& msg, string& ser
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     GameStartNtf gameStartNtf;
@@ -703,7 +717,7 @@ bool InitHardCard::operation( Robot& myRobot, const string& msg, string& seriali
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     DealCardNtf dealCardNtf;
@@ -769,7 +783,7 @@ bool GetCallScoreInfo::operation( Robot& myRobot, const string& msg, string& ser
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     UserCallScoreNtf userCallScoreNtf;
@@ -846,7 +860,7 @@ bool GetLordInfo::operation( Robot& myRobot, const string& msg, string& serializ
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     LordSetNtf lordSetNtf;
@@ -872,7 +886,7 @@ bool GetBaseCardInfo::operation( Robot& myRobot, const string& msg, string& seri
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     SendBaseCardNtf sendBaseCardNtf;
@@ -934,7 +948,7 @@ bool GetTakeOutCardInfo::operation( Robot& myRobot, const string& msg, string& s
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     TakeoutCardNtf takeoutCardNtf;
@@ -1011,7 +1025,7 @@ bool GetTrustInfo::operation( Robot& myRobot, const string& msg, string& seriali
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     TrustNtf trustNtf;
@@ -1060,14 +1074,14 @@ bool GetGameOverInfo::operation( Robot& myRobot, const string& msg, string& seri
     INFO("===================GetGameOverInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", myRobot.GetRobotId());
-    if (GAMMING != myRobot.GetStatus())
-    {
-        INFO("Robot %d doesn't in gamming status, will set it to game init status.", myRobot.GetRobotId());
-    }
+    //if (GAMMING != myRobot.GetStatus())
+    //{
+    //    INFO("Robot %d doesn't in gamming status, will set it to game init status.", myRobot.GetRobotId());
+    //}
     GameOverNtf gameOverNtf;
     if (!gameOverNtf.ParseFromString(msg))
     {
-        ERROR("parse pb message GameOverNtf error.");
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     int reason = gameOverNtf.reason();
@@ -1102,11 +1116,11 @@ bool GetGameResultInfo::operation( Robot& myRobot, const string& msg, string& se
     INFO("===================GetGameResultInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", myRobot.GetRobotId());
-    if (GAMMING != myRobot.GetStatus())
-    {
-        INFO("Robot %d doesn't in gamming status, and will set it to gamming status.", myRobot.GetRobotId());
-        myRobot.SetStatus(GAMMING);
-    }
+    //if (GAMMING != myRobot.GetStatus())
+    //{
+    //    ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
+    //    return false;
+    //}
     OrgRoomDdzGameResultNtf orgRoomDdzGameResultNtf;
     if (!orgRoomDdzGameResultNtf.ParseFromString(msg))
     {
@@ -1139,10 +1153,11 @@ bool GetCompetitionOverInfo::operation( Robot& myRobot, const string& msg, strin
     INFO("===================GetCompetitionOverInfo START=================");
     OGLordRobotAI& robot = myRobot.GetRobot();
     INFO("Message for robot %d.", myRobot.GetRobotId());
-    if (GAMMING != myRobot.GetStatus())
-    {
-        INFO("Robot %d doesn't in gamming status, and will set it to game init status.", myRobot.GetRobotId());
-    }
+    //if (GAMMING != myRobot.GetStatus())
+    //{
+    //    ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
+    //    return false;
+    //}
     OrgRoomDdzMatchOverNtf orgRoomDdzMatchOverNtf;
     robot.RbtResetData();
     myRobot.SetStatus(WAITSIGNUP);
@@ -1159,7 +1174,7 @@ bool GetReadyResultInfo::operation( Robot& myRobot, const string& msg, string& s
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     ReadyAck readyAck;
@@ -1190,7 +1205,7 @@ bool GetCallScoreResultInfo::operation( Robot& myRobot, const string& msg, strin
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     CallScoreAck callScoreAck;
@@ -1222,7 +1237,7 @@ bool GetTakeOutCardResultInfo::operation( Robot& myRobot, const string& msg, str
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     TakeoutCardAck takeoutCardAck;
@@ -1255,7 +1270,7 @@ bool GetTrustResultInfo::operation( Robot& myRobot, const string& msg, string& s
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (GAMMING != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in gamming status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in gamming status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
     TrustLiftAck trustLiftAck;
@@ -1347,24 +1362,26 @@ bool GetKeepPlayInfo::operation( Robot& myRobot, const string& msg, string& seri
     INFO("Message for robot %d.", myRobot.GetRobotId());
     if (KEEPPLAY != myRobot.GetStatus())
     {
-        ERROR("Robot %d doesn't in keep play status.", myRobot.GetRobotId());
+        ERROR("Robot %d doesn't in KEEPPLAY status, robot status is %d.", myRobot.GetRobotId(), myRobot.GetStatus());
         return false;
     }
+    myRobot.SetNeedKeepPlay(false);
     KeepPlayingAck keepPlayingAck;
     keepPlayingAck.ParseFromString(msg);
     int result = keepPlayingAck.result();
     if (0 != result)
     {
-        ERROR("Get keep play req failed, reslut code is: %d.", result);
-        myRobot.SetStatus(GAMMING);//当前局会一直都出不了牌，下一局会就能正常了
+        ERROR("Get keep play req failed, reslut code is: %d. Has set robot status to WAITSIGNUP, robot Id is: %d.", result, myRobot.GetRobotId());
+        myRobot.SetStatus(WAITSIGNUP);//直接报名比赛就好了
         return false;
     }
     int index = 0;
     int robotId = myRobot.GetRobotId();
-    int iPlayerInfoSize = keepPlayingAck.playerinfo_size();
+    //int iPlayerInfoSize = keepPlayingAck.playerinfo_size();
+    int iPlayerInfoSize = keepPlayingAck.keepinfo().playerinfo_size();
     for (index = 0; index < iPlayerInfoSize; ++index)
     {
-        int iNetId = ::atoi(keepPlayingAck.playerinfo(index).detailinfo().username().c_str());
+        int iNetId = ::atoi(keepPlayingAck.keepinfo().playerinfo(index).detailinfo().username().c_str());
         INFO("total userNum: %d, robot id: %d, net id: %d.", iPlayerInfoSize, robotId, iNetId);
         if (iNetId == robotId)
         {
@@ -1381,22 +1398,22 @@ bool GetKeepPlayInfo::operation( Robot& myRobot, const string& msg, string& seri
         robot.SetAiSeat(index);
     }
     int iAiSeat = robot.GetAiSeat();
-    int iLordSeat = keepPlayingAck.gameinfo().seatlord();
+    int iLordSeat = keepPlayingAck.keepinfo().gameinfo().seatlord();
     INFO("robot %d seat is: %d, lord seat is: %d", robotId, iAiSeat, iLordSeat);
     vector<int> vecHandCards;
     vector<int> vecBaseCards;
-    int iBaseCardsSize = keepPlayingAck.gameinfo().basecards_size();
+    int iBaseCardsSize = keepPlayingAck.keepinfo().gameinfo().basecards_size();
     for (index = 0; index < iBaseCardsSize; ++index)
     {
-        vecBaseCards.push_back(keepPlayingAck.gameinfo().basecards(index));
+        vecBaseCards.push_back(keepPlayingAck.keepinfo().gameinfo().basecards(index));
     }
     INFO("Robot %d current base cards is:", robotId);
     printCardInfo(vecBaseCards);
 
-    int iHandsCardsSize = keepPlayingAck.playerinfo(iAiSeat).cards_size();
+    int iHandsCardsSize = keepPlayingAck.keepinfo().playerinfo(iAiSeat).cards_size();
     for (index = 0; index < iHandsCardsSize; ++index)
     {
-        vecHandCards.push_back(keepPlayingAck.playerinfo(iAiSeat).cards(index));
+        vecHandCards.push_back(keepPlayingAck.keepinfo().playerinfo(iAiSeat).cards(index));
     }
     INFO("Robot %d current hands cards is:", robotId);
     printCardInfo(vecHandCards);

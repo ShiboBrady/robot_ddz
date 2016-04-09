@@ -1,4 +1,3 @@
-syntax = "proto2";
 package YLYQ.Protocol.org_room2client;
 
 // msgId range[2001, 2499]
@@ -15,6 +14,10 @@ enum OrgRoomMsgId {
     MSGID_DDZ_ROOM_STAT_REQ = 2005;
     // 房间状态应答，对应消息 OrgRoomDdzRoomStatAck
     MSGID_DDZ_ROOM_STAT_ACK = 2006;
+    // 房间需要机器人数量请求，对应消息 OrgRoomDdzNeedRobotReq
+    MSGID_DDZ_ROOM_NEED_ROBOT_REQ = 2007;
+    // 房间需要机器人数量应答，对应消息 OrgRoomDdzNeedRobotAck
+    MSGID_DDZ_ROOM_NEED_ROBOT_ACK = 2008;
 
     // 查询报名条件请求，对应消息 OrgRoomDdzSignUpConditionReq 
     MSGID_DDZ_SIGN_UP_CONDITION_REQ = 2011;
@@ -69,6 +72,15 @@ message OrgRoomDdzRoomStatAck {
         required int32 userCount = 2;// 人数
     }
     repeated RoomStat stat = 2;
+}
+
+message OrgRoomDdzNeedRobotReq {
+    required int32 roomId = 1;      // 房间/比赛 ID 列表
+}
+
+message OrgRoomDdzNeedRobotAck {
+    required int32 result = 1;
+    optional int32 robots = 2;      // 需要的机器人数量
 }
 
 message OrgRoomDdzQuickStartReq {

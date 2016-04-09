@@ -36,7 +36,7 @@ EventProcess::EventProcess()
     InitSignal();
 }
 
-void EventProcess::Event(std::shared_ptr<Conn> conn)
+void EventProcess::Event(std::shared_ptr<Conn> conn, bool isErrorOccurence)
 {
     if (conn->fd_ == headerRobot_)
     {
@@ -47,7 +47,11 @@ void EventProcess::Event(std::shared_ptr<Conn> conn)
     {
         INFO("Robot %d disconnected.", conn->robot_->GetRobotId());
     }
-    ReConnect(this, conn->robot_->GetRobotId());
+    if (isErrorOccurence)
+    {
+        INFO("Some error course connect break, and will try to reconnect.");
+        ReConnect(this, conn->robot_->GetRobotId());
+    }
 }
 
 void EventProcess::ReConnentEvent(std::shared_ptr<Conn> conn, int id)
@@ -260,14 +264,7 @@ void EventProcess::SendQueryRoomStatusReq(std::shared_ptr<Conn> conn, bool isTim
 
 void EventProcess::ChangeStatusForRobot(int robotNum)
 {
-    if (isMatch_)
-    {
-        INFO("Will set %d robot for match.", robotNum);
-    }
-    else
-    {
-        INFO("Will set %d robot for game.", robotNum);
-    }
+    INFO("Will set %d robot for %s.", robotNum, isMatch_ ? "match" : "game");
 
     //从队列中取出机器人，再将取出的机器人重新入队
     int queueSize = int(taskQueue_.size());
@@ -276,19 +273,35 @@ void EventProcess::ChangeStatusForRobot(int robotNum)
         auto robotFd = taskQueue_.front();
         taskQueue_.pop();
 
-        auto findRet = mapConn_.find(robotFd);//查找消息对应的机器人
+        auto findRet = mapConn_.find(robotFd.first);//查找消息对应的机器人
         if ((mapConn_.end()) == findRet)
         {
             continue;//没找到
         }
 
+        RobotStatus status = findRet->second->robot_->GetStatus();
         //找到
-        if (WAITSIGNUP == findRet->second->robot_->GetStatus())
+        if (WAITSIGNUP == status)
         {
             INFO("Choose robot %d.", findRet->second->robot_->GetRobotId());
             SendReqForRobot(findRet->second);
+            robotFd.second = 1;
             --robotNum;
         }
+        //else if (GAMMING != status && HEADER != status)
+        //{
+        //    DEBUG("This robot isn\'t avaluable, status is: %d.", status);
+        //    robotFd.second += 1;
+        //    if (robotFd.second > 2) { //当机器人处于该状态的次数大于2的时候，就主动改变其状态
+        //        if (INITGAME == status || CANSINGUP == status || KEEPPLAY == status) {
+        //            findRet->second->robot_->SetStatus(WAITSIGNUP);
+        //            robotFd.second = 1;
+        //            SendReqForRobot(findRet->second);
+        //            --robotNum;
+        //            DEBUG("robot %d status is %d, and changed to WAITSIGNUP.", findRet->second->robot_->GetRobotId(), status);
+        //        }
+        //    }
+        //}
         taskQueue_.push(robotFd); //重新入队
     }
 
@@ -384,24 +397,10 @@ void EventProcess::query_room_state_time_cb(int fd, short events, void* arg)
         INFO("Choose robot %d as header robot.", conn->robot_->GetRobotId());
         eventProcess->headerRobot_ = conn->fd_;
         conn->robot_->SetStatus(HEADER);
-
-        //将除了调度机器人以外的其他机器人加入任务队列中
-        //while ((eventProcess->taskQueue_).size()) //清空
-        //{
-        //    (eventProcess->taskQueue_).pop();
-        //}
-        //for (auto it : eventProcess->mapConn_)
-        //{
-        //    if (it.first == eventProcess->headerRobot_)
-        //    {
-        //        continue;
-        //    }
-        //    eventProcess->taskQueue_.push(it.first);
-        //}
-        //INFO("Add robot in task queue, size is: %d.", int(eventProcess->taskQueue_.size()));
     }
     shared_ptr<Conn> conn = eventProcess->mapConn_[eventProcess->headerRobot_];
     eventProcess->SendQueryRoomStatusReq(conn, true);
+    INFO("Has %d robot in queue", eventProcess->taskQueue_.size());
 }
 
 void EventProcess::heart_beat_time_cb(int fd, short events, void* arg)
@@ -445,7 +444,7 @@ void EventProcess::Verify(int robotId, int fd)
         findRet->second->AddToWriteBuffer(strSend.c_str(), strSend.length());
     }
     DEBUG("Robot %d send verify once.", robotId);
-    taskQueue_.push(fd);
+    taskQueue_.push(make_pair(fd, 1));
 }
 
 void EventProcess::GameInit(int robotId, int fd)

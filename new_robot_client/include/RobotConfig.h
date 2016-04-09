@@ -1,4 +1,6 @@
-#pragma once
+#ifndef __ROBOTCONFIG_H__
+#define __ROBOTCONFIG_H__
+
 #include <vector>
 
 namespace robot
@@ -13,21 +15,10 @@ const int SOLO_CHAIN_CHARGE_LEN[8] = {7, 9, 11, 13, 15, 17, 18, 18};
 
 const int LAIZI_TOTAL_COUNT = 4;
 
-enum RobotStatus
-{
-    INIT = 0,   //刚初始化
-    VERIFIED,   //验证通过
-    INITGAME,   //游戏初始化通过
-    WAITSIGNUP, //等待报名(等待报名快速开始游戏)
-    CANSINGUP,  //可以报名
-    SIGNUPED,   //报名成功
-    QUICKGAME,  //等待快速开始游戏
-    GAMMING,    //正在游戏中
-    EXITTING,   //正在退出游戏
-    KEEPPLAY,   //准备断线续玩
-    OTHER,      //闲置状态
-    HEADER,     //调度状态
-};
+const int STATUS_NUM = 12;
+
+const char STATUS_CHAR[STATUS_NUM][20] = {"INIT", "VERIFIED", "INITGAME", "WAITSIGNUP", \
+"CANSINGUP", "SIGNUPED", "QUICKGAME", "GAMMING", "EXITTING", "KEEPPLAY", "OTHER", "HEADER"};
 
 //消息种类定义
 enum msgID {
@@ -76,10 +67,24 @@ enum msgID {
     MSGID_READY_REQ                 = 5011, // 准备完毕
     MSGID_READY_ACK                 = 5012, // 准备完毕应答
 
-    MSGID_DDZ_QUICK_START_REQ       = 2001, //
+    MSGID_DDZ_QUICK_START_REQ       = 2001, // 游戏场快速开始请求
     MSGID_DDZ_QUICK_START_ACK       = 2002, // 游戏场快速开始应答
 
     MSGID_HEARTBEAT_NTF             = 10,   //心跳消息
+
+    MSGID_DDZ_ROOM_NEED_ROBOT_REQ   = 2007, //房间需要机器人数量请求，对应消息 OrgRoomDdzNeedRobotReq
+    MSGID_DDZ_ROOM_NEED_ROBOT_ACK   = 2008, //房间需要机器人数量应答，对应消息 OrgRoomDdzNeedRobotAck
+};
+
+enum ReturnStatus {
+    SUCCESSED = 0,
+	NOACTION = 101,
+	SENGMSG_NO_DELAY = 102,
+	SENDMSG_DELAY = 103,
+	SADD_ROBOT = 104,
+	CLOSE_CONNECTION = 105,
+
+	FAIL = 201,
 };
 
 enum CardPoint
@@ -184,3 +189,5 @@ struct HandsMapSummaryLvl
 };
 
 }
+
+#endif /*__ROBOTCONFIG_H__*/

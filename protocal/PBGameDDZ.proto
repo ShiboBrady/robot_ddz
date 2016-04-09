@@ -1,4 +1,3 @@
-syntax = "proto2";
 package PBGameDDZ;
 
 /* ddz game msgid limits 5000-5100 */
@@ -160,35 +159,38 @@ message KeepPlayingReq {
 // 断线续玩
 message KeepPlayingAck {
     required int32 result = 1;
-    // 游戏实时信息
-    message GameInfo {
-        required int32 status = 1;      // 游戏当前状态
-        required int32 seatlord = 2;    // 地主的座位号
-        required int32 seatactive = 3;  // 当前活动玩家座位号
-        required int32 multiple = 4;    // 当前倍数, 基本倍数, 如果有踢的需要各自累加倍数
-        required int32 maxcallscore = 5;// 当前最大叫分
-        repeated int32 basecards = 6;   // 底牌数据
+    message KeepDetail {
+        // 游戏实时信息
+        message GameInfo {
+            required int32 status = 1;      // 游戏当前状态
+            required int32 seatlord = 2;    // 地主的座位号
+            required int32 seatactive = 3;  // 当前活动玩家座位号
+            required int32 multiple = 4;    // 当前倍数, 基本倍数, 如果有踢的需要各自累加倍数
+            required int32 maxcallscore = 5;// 当前最大叫分
+            repeated int32 basecards = 6;   // 底牌数据
+        }
+        
+        // 玩家动态信息
+        message PlayerInfo {
+            required bool trust = 1;          // 托管状态
+            required int32 trustsurplus = 2;  // 解除托管剩余次数
+            required int32 callscore = 3;     // 叫分值
+            repeated int32 cards = 4;         // 手牌内容
+            repeated int32 lastcards = 5;     // 最后一手牌
+            required UserInfo detailinfo = 6; // 用户详细信息 
+        }
+        
+        required GameInfo gameinfo = 1;     // 游戏信息
+        repeated PlayerInfo playerinfo = 2; // 玩家信息
+        required int32 ready = 3;           // 准备超时时间
+        required int32 callscore = 4;       // 叫分超时时间
+        required int32 takeout = 5;         // 出牌超时时间
+        required int32 settle = 6;          // 结算框显示时间（超时后自动准备）
+        required string gameChannel = 7;    // 游戏服务通道号
+        required int32 basicScore   = 8;    // 底分
+        optional MatchInfo matchInfo = 9;  // 如果是游戏场，该字段不用
     }
-    
-    // 玩家动态信息
-    message PlayerInfo {
-        required bool trust = 1;          // 托管状态
-        required int32 trustsurplus = 2;  // 解除托管剩余次数
-        required int32 callscore = 3;     // 叫分值
-        repeated int32 cards = 4;         // 手牌内容
-        repeated int32 lastcards = 5;     // 最后一手牌
-        required UserInfo detailinfo = 6; // 用户详细信息 
-    }
-    
-    required GameInfo gameinfo = 2;     // 游戏信息
-    repeated PlayerInfo playerinfo = 3; // 玩家信息
-    required int32 ready = 4;           // 准备超时时间
-    required int32 callscore = 5;       // 叫分超时时间
-    required int32 takeout = 6;         // 出牌超时时间
-    required int32 settle = 7;          // 结算框显示时间（超时后自动准备）
-    required string gameChannel = 8;    // 游戏服务通道号
-    required int32 basicScore   = 9;    // 底分
-    optional MatchInfo matchInfo = 10;  // 如果是游戏场，该字段不用
+    optional KeepDetail keepInfo = 2;
 }
 // ------------------- 坐下后的消息 ------------------- END
 
