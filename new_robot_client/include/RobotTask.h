@@ -11,7 +11,7 @@ public:
     ~RobotTask() {};
     
     virtual bool AnalysisAndDecision(std::shared_ptr<MsgNode>& msgNode);
-	virtual bool NextActionProcess( std::shared_ptr<MsgNode>& msgNode );
+    virtual bool NextActionProcess( std::shared_ptr<MsgNode>& msgNode );
     virtual void RobotInit();
     virtual void DeleteTimer();
 
@@ -51,13 +51,12 @@ public:
     bool SendTrustCancelReq(std::shared_ptr<MsgNode>& msgNode);               //取消托管消息发送
     bool RecvTrustCancelAck(std::shared_ptr<MsgNode>& msgNode);               //取消托管消息回复
 
-    bool SendCancelSignUpReq(std::shared_ptr<MsgNode>& msgNode);              //取消报名消息发送
     bool RecvCancelSignUpAck(std::shared_ptr<MsgNode>& msgNode);              //取消报名消息回复
 
 private:
-	OGLordRobotAI robot_;
-	int costId_; //报名需要的费用id
-	int myScore_; //此局自己的叫分
+    OGLordRobotAI robot_;
+    int costId_; //报名需要的费用id
+    int myScore_; //此局自己的叫分
     int delaySendActiveMsgTime_;
     int delaySendPassiveMsgTime_;
 };

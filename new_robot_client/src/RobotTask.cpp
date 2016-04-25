@@ -906,13 +906,17 @@ bool RobotTask::SendTakeOutCardReq(std::shared_ptr<MsgNode>& msgNode)     //发�
         return false;
     }
     int iDelayTime = 0;
-    if (robot::NOTIFY_BASECARD == msgNode->GetMsgId()) {
+    if (robot::NOTIFY_BASECARD == msgNode->GetMsgId()) { //收到底牌后
         iDelayTime = delaySendActiveMsgTime_;
-    } else {
-        srand((int)time(NULL));
-        iDelayTime = rand() % (delaySendPassiveMsgTime_ - 1) + 1;
+    } else {                                             //收到其他人牌后
+        if (delaySendPassiveMsgTime_ > 0) {              //配置文件的配置
+            srand((int)time(NULL));
+            iDelayTime = rand() % delaySendPassiveMsgTime_ + 1;
+        }
     }
-    msgNode->SetMsgDelaySecond(iDelayTime);
+    if (iDelayTime > 0) {
+        msgNode->SetMsgDelaySecond(iDelayTime);
+    }
     INFO("=================== SendTakeOutCardReq END =================");
     return true;
 }
@@ -978,17 +982,6 @@ bool RobotTask::RecvTrustCancelAck(std::shared_ptr<MsgNode>& msgNode) {
         ERROR("robot %d requst cancle trust failed.", robotId_);
     }
     INFO("=================== RecvTrustCancelAck END =================");
-    return true;
-}
-
-bool RobotTask::SendCancelSignUpReq(std::shared_ptr<MsgNode>& msgNode) {
-    INFO("=================== SendCancelSignUpReq START =================");
-    OrgRoomDdzCancelSignUpReq orgRoomDdzCancelSignUpReq;
-    orgRoomDdzCancelSignUpReq.set_matchid(matchId_);
-    if (!SerializeSendMsg(&orgRoomDdzCancelSignUpReq, robot::MSGID_DDZ_CANCEL_SIGN_UP_REQ, msgNode)) {
-        return false;
-    }
-    INFO("=================== SendCancelSignUpReq END =================");
     return true;
 }
 

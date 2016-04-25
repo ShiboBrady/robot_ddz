@@ -131,7 +131,9 @@ bool EventProcess::initParam() {
 void EventProcess::Start() {
     InitTimingWheelTimer(); //初始化TimmingWheel定时器
     InitHeaderRobotConnection(); //初始化机器人
-    RobotKeepPlayTest(); //检测是否有需要断线续玩的机器人
+    if (confAccess_->GetIsNeedKeepPlay()) {
+        RobotKeepPlayTest(); //检测是否有需要断线续玩的机器人
+    }
     tcpEventServer_.SendHeartBeatMsg(heartBeatTime_, strHeartBeatMsg_); //初始化心跳发送器
     tcpEventServer_.Start(); //开始监听
 }
@@ -268,8 +270,17 @@ void EventProcess::RebuildConnection() {
 
 void EventProcess::SignalEvent() {
     DEBUG("Receved SIGINI signal, program will exit...");
+    auto& connmap = tcpEventServer_.GetConnection();
+    for (auto& connection : connmap) {
+        auto robot = connection.second->robot_;
+        if (robot) {
+            shared_ptr<MsgNode> msgNode(new MsgNode);
+            msgNode->SetConn(connection.second);
+            robot->SendCancelSignUpReq(msgNode);
+        }
+    }
     MessagePackagePtr ExitTimer(new MsgNode);
-    ExitTimer->SetTimer(2, 0); //暂定2
+    ExitTimer->SetTimer(1, 0); //暂定1
     tcpEventServer_.Stop(ExitTimer);
 }
 

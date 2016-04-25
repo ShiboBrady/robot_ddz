@@ -17,8 +17,6 @@ public:
 
     bool BeginToQueryRoomStatus(std::shared_ptr<MsgNode>& msgNode);
 
-    bool ExecuteQueryAction(std::shared_ptr<MsgNode>& msgNode);
-
     bool SendQueryRoomStatusReq(std::shared_ptr<MsgNode>& msgNode);           //查询房间状态消息发送
     bool RecvQueryRoomStatusAck(std::shared_ptr<MsgNode>& msgNode);           //查询房间状态消息回复
 

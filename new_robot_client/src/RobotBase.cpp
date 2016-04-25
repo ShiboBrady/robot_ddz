@@ -222,6 +222,20 @@ bool RobotBase::RecvInitGameAck(std::shared_ptr<MsgNode>& msgNode){         //åˆ
     return true;
 }
 
+bool RobotBase::SendCancelSignUpReq(std::shared_ptr<MsgNode>& msgNode) {
+    INFO("=================== SendCancelSignUpReq START =================");
+    if (SIGNUPED == status_) {
+        OrgRoomDdzCancelSignUpReq orgRoomDdzCancelSignUpReq;
+        orgRoomDdzCancelSignUpReq.set_matchid(matchId_);
+        if (!SerializeSendMsg(&orgRoomDdzCancelSignUpReq, robot::MSGID_DDZ_CANCEL_SIGN_UP_REQ, msgNode)) {
+            return false;
+        }
+        SendMsg(msgNode);
+    }
+    INFO("=================== SendCancelSignUpReq END =================");
+    return true;
+}
+
 bool RobotBase::DeserializePbMsg( google::protobuf::Message* pbObject, const std::string& strMsg ) {
     if (!pbObject->ParseFromString(strMsg)) {
         ERROR("Parse pb msg error!");

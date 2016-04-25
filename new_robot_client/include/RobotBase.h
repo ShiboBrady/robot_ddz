@@ -70,6 +70,8 @@ public:
     bool SendInitGameReq(std::shared_ptr<MsgNode>& msgNode);                  //初始化游戏消息发送
     bool RecvInitGameAck(std::shared_ptr<MsgNode>& msgNode);                  //初始化游戏消息回复
 
+    bool SendCancelSignUpReq(std::shared_ptr<MsgNode>& msgNode);              //取消报名消息发送
+
 protected:
     bool DeserializePbMsg(google::protobuf::Message* pbObject, const std::string& strMsg);
 
